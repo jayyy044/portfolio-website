@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Responsive Mockups · Maanas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0908;
+        --text: #edeae3;
+        --muted: #8a847c;
+        --accent: #ff6f1a;
+        --line: rgba(237, 234, 227, 0.08);
+        --mono: 'Geist Mono', ui-monospace, monospace;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--mono);
+        min-height: 100vh;
+        padding: 48px clamp(20px, 5vw, 64px) 96px;
+      }
+
+      header {
+        max-width: 760px;
+        margin: 0 auto 56px;
+        text-align: center;
+      }
+      header .badge {
+        display: inline-block;
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        background: var(--accent);
+        color: var(--bg);
+        padding: 4px 8px;
+        font-weight: 600;
+        margin-bottom: 20px;
+      }
+      header h1 {
+        font-size: clamp(20px, 4vw, 30px);
+        font-weight: 500;
+        letter-spacing: 0.02em;
+      }
+      header p {
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      header code {
+        color: var(--accent);
+      }
+
+      .gallery {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 56px 40px;
+        align-items: flex-end;
+        justify-content: center;
+        max-width: 1500px;
+        margin: 0 auto;
+      }
+
+      figure {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+      }
+
+      /* the visible screen is a window; the iframe inside is the real device
+         viewport, scaled down with transform so the layout renders exactly as
+         it would at that resolution */
+      .screen {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.5),
+          0 24px 60px rgba(0, 0, 0, 0.55);
+        background: #000;
+      }
+      .screen iframe {
+        border: 0;
+        transform-origin: top left;
+        display: block;
+      }
+
+      figcaption {
+        text-align: center;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      figcaption .name {
+        color: var(--text);
+      }
+      figcaption .res {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        letter-spacing: 0.18em;
+      }
+
+      .note {
+        max-width: 640px;
+        margin: 72px auto 0;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--muted);
+        border-top: 1px solid var(--line);
+        padding-top: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="badge">Responsive Preview</span>
+      <h1>How it looks on different screens</h1>
+      <p>
+        Each frame below is the <strong>live site</strong> rendered at that
+        device's real resolution and scaled to fit. Resize your browser or open
+        any frame's URL directly to test more sizes. Served at
+        <code>/mockups.html</code> by the Vite dev server.
+      </p>
+    </header>
+
+    <div class="gallery">
+      <!-- Phone (portrait) -->
+      <figure>
+        <div class="screen" style="width: 164px; height: 355px">
+          <iframe
+            src="/"
+            style="width: 390px; height: 844px; transform: scale(0.42)"
+            title="Phone portrait"
+          ></iframe>
+        </div>
+        <figcaption>
+          <span class="name">Phone</span>
+          <span class="res">390 × 844</span>
+        </figcaption>
+      </figure>
+
+      <!-- Phone (landscape) -->
+      <figure>
+        <div class="screen" style="width: 355px; height: 164px">
+          <iframe
+            src="/"
+            style="width: 844px; height: 390px; transform: scale(0.42)"
+            title="Phone landscape"
+          ></iframe>
+        </div>
+        <figcaption>
+          <span class="name">Phone · landscape</span>
+          <span class="res">844 × 390</span>
+        </figcaption>
+      </figure>
+
+      <!-- Tablet -->
+      <figure>
+        <div class="screen" style="width: 284px; height: 378px">
+          <iframe
+            src="/"
+            style="width: 834px; height: 1112px; transform: scale(0.34)"
+            title="Tablet"
+          ></iframe>
+        </div>
+        <figcaption>
+          <span class="name">Tablet</span>
+          <span class="res">834 × 1112</span>
+        </figcaption>
+      </figure>
+
+      <!-- Laptop -->
+      <figure>
+        <div class="screen" style="width: 432px; height: 270px">
+          <iframe
+            src="/"
+            style="width: 1440px; height: 900px; transform: scale(0.3)"
+            title="Laptop"
+          ></iframe>
+        </div>
+        <figcaption>
+          <span class="name">Laptop</span>
+          <span class="res">1440 × 900</span>
+        </figcaption>
+      </figure>
+
+      <!-- Desktop -->
+      <figure>
+        <div class="screen" style="width: 538px; height: 302px">
+          <iframe
+            src="/"
+            style="width: 1920px; height: 1080px; transform: scale(0.28)"
+            title="Desktop"
+          ></iframe>
+        </div>
+        <figcaption>
+          <span class="name">Desktop</span>
+          <span class="res">1920 × 1080</span>
+        </figcaption>
+      </figure>
+    </div>
+
+    <p class="note">
+      Tip: this page loads several copies of the site (each runs its own globe +
+      atmosphere animation), so it's heavier than the real page. It's a preview
+      tool only — the actual site is just <code>/</code>.
+    </p>
+  </body>
+</html>

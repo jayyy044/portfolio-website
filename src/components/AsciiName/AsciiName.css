@@ -1,0 +1,13 @@
+.ascii-name {
+  font-family: var(--mono);
+  font-size: calc(var(--globe-size) * 0.010989); /* 10px @ globe 910px */
+  line-height: 1;
+  color: rgb(255, 205, 120); /* brighter than the globe */
+  margin: 0;
+  white-space: pre;
+  user-select: none;
+  text-shadow:
+    0 0 1px rgba(255, 111, 26, 0.7),
+    0 0 12px rgba(255, 111, 26, 0.5),
+    0 0 28px rgba(255, 180, 80, 0.32);
+}
