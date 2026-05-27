@@ -1,0 +1,26 @@
+/* tall section that gives the sticky viewport room to scrub through */
+.hero-pin {
+  position: relative;
+  height: 250vh;
+  z-index: 5;
+}
+
+.hero-sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px 24px;
+  overflow: hidden; /* clips the tiles while they're collapsed in the middle */
+}
+
+/* wraps the globe + name card; GSAP fades & scales it out as you scroll.
+   z-index sits above the blob layer (3) so the blob fades in behind it. */
+.hero-globe {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  will-change: opacity, transform;
+}

@@ -1,0 +1,31 @@
+/* fixed background layer; starts invisible and is faded in by the hero
+   timeline (GSAP) so it appears together with the bento. sits above the
+   landing grid/vignette (z 0–2) but behind the hero content (z 4+). */
+.blob-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
+}
+
+.blob-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* gentle top-to-bottom darken so the bento tiles stay readable over the blob */
+.blob-darken {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 9, 8, 0.35) 0%,
+    rgba(10, 9, 8, 0.6) 50%,
+    rgba(10, 9, 8, 0.85) 100%
+  );
+}

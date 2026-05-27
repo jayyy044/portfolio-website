@@ -1,0 +1,103 @@
+.bento {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: stretch;
+  justify-content: center; /* keeps the pair centered → they grow from the middle */
+  width: 100%;
+  height: 72vh;
+  gap: 0; /* GSAP opens this to 32px */
+  pointer-events: none;
+}
+
+/* initial (collapsed) state — GSAP animates these open */
+.tile {
+  position: relative;
+  width: 0;
+  opacity: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: rgba(15, 12, 10, 0.5);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  pointer-events: auto;
+  will-change: width, transform, opacity, border-radius;
+}
+.tile.left {
+  transform: translateX(-100%);
+}
+.tile.right {
+  transform: translateX(100%);
+}
+
+/* content is laid out at full size and clipped by the tile as it grows */
+.tile-content {
+  position: absolute;
+  inset: 26px 26px 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tile-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tile-top .online {
+  color: var(--accent);
+}
+
+.tile h3 {
+  font-size: clamp(26px, 3vw, 40px);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.tile p {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  opacity: 0.82;
+  max-width: 340px;
+}
+
+.tile-stack {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: auto;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tile-stack b {
+  display: block;
+  margin-top: 3px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.tile-label {
+  position: absolute;
+  bottom: 18px;
+  left: 26px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+}

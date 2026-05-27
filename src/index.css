@@ -2,8 +2,19 @@
   --bg: #0a0908;
   --text: #edeae3;
   --muted: #8a847c;
-  --accent: #ff6f1a;
+
+  /* Warm ember palette — derived from the globe (deep red → amber gradient)
+     and the gold "Hi, my name is" / MAANAS text. One signature orange accent
+     with warm gold/amber tints; everything else draws from these. */
+  --accent: #ff6f1a; /* primary orange — dots, links, labels */
+  --accent-rgb: 255, 111, 26; /* same orange, for rgba() tints */
+  --gold: rgb(255, 205, 120); /* warm gold — headings & the name */
+  --amber: rgb(255, 180, 80); /* amber mid-tone — soft glows */
+  --ember: #b8470f; /* deep ember — darkest accent moments */
+
   --line: rgba(237, 234, 227, 0.08);
+  --line-strong: rgba(237, 234, 227, 0.14);
+
   --mono: 'Geist Mono', ui-monospace, monospace;
 }
 
@@ -18,15 +29,12 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  height: 100%;
 }
 
 body {
-  overflow: hidden;
-}
-
-#root {
-  height: 100%;
+  /* vertical scroll is now used for the hero reveal; keep horizontal locked
+     (the bento tiles slide in from off-screen) */
+  overflow-x: hidden;
 }
 
 ::selection {

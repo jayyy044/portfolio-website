@@ -1,0 +1,207 @@
+/* gallery fills its slot; grid up top, pager below */
+.gallery {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+/* fixed grid — 6 images at a time (3 × 2), filling the available height */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  animation: gallery-fade 0.3s ease; /* subtle fade when paging */
+}
+@keyframes gallery-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.shot {
+  position: relative;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      110% 110% at var(--px, 30%) var(--py, 20%),
+      rgba(var(--accent-rgb), 0.4),
+      transparent 60%
+    ),
+    linear-gradient(135deg, rgba(40, 28, 20, 0.6), rgba(15, 12, 10, 0.6));
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease;
+}
+.shot:hover {
+  transform: translateY(-2px);
+  border-color: rgba(var(--accent-rgb), 0.6);
+}
+.shot span {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+}
+
+/* ===== Pager (shown only when there's more than one page) ===== */
+.gallery-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.pager-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+.pager-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+.pager-btn:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.22);
+  border-color: var(--accent);
+}
+.pager-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ===== Lightbox (portaled to <body>) ===== */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6vh 7vw;
+  background: rgba(8, 7, 6, 0.82);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  animation: lb-fade 0.25s ease;
+}
+@keyframes lb-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.lb-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(820px, 86vw);
+  animation: lb-pop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes lb-pop {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+}
+
+.lb-img {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(
+      110% 110% at var(--px, 30%) var(--py, 20%),
+      rgba(var(--accent-rgb), 0.45),
+      transparent 60%
+    ),
+    linear-gradient(135deg, rgba(40, 28, 20, 0.7), rgba(15, 12, 10, 0.7));
+}
+.lb-img span {
+  font-family: var(--mono);
+  font-size: clamp(40px, 8vw, 96px);
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  opacity: 0.85;
+}
+
+.lb-frame figcaption {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lb-close,
+.lb-nav {
+  position: fixed;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.lb-close:hover,
+.lb-nav:hover {
+  background: rgba(var(--accent-rgb), 0.22);
+  border-color: var(--accent);
+}
+
+.lb-close {
+  top: 22px;
+  right: 26px;
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+}
+.lb-nav {
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  font-size: 26px;
+  line-height: 1;
+}
+.lb-nav.prev {
+  left: 24px;
+}
+.lb-nav.next {
+  right: 24px;
+}
