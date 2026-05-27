@@ -19,6 +19,17 @@ export default function App() {
     const add = (time) => lenis.raf(time * 1000)
     gsap.ticker.add(add)
     gsap.ticker.lagSmoothing(0)
+
+    // Layout shifts strand ScrollTrigger start/end positions (the trigger keeps
+    // firing at where an element *used to be*), which silently hides reveals.
+    // Recompute after the mono font loads (it changes element heights)...
+    document.fonts?.ready.then(() => ScrollTrigger.refresh())
+    // ...and after every Vite HMR update — a CSS-only edit doesn't re-run the
+    // GSAP effects, so without this a padding/timing tweak leaves triggers stale.
+    if (import.meta.hot) {
+      import.meta.hot.on('vite:afterUpdate', () => ScrollTrigger.refresh())
+    }
+
     return () => {
       gsap.ticker.remove(add)
       lenis.destroy()

@@ -7,7 +7,7 @@
   justify-content: center;
   /* big top clearance so the card's reveal only fires AFTER the bento (which
      expands + dwells in the pinned hero above) has scrolled off-screen */
-  padding: 70vh 24px 18vh;
+  padding: 0vh 24px 18vh;
 }
 
 /* same glass card language as About / Gallery, but as wide as the two of them
@@ -59,7 +59,7 @@
   left: 0;
   right: 0;
   margin: 0;
-  padding: 0 16px;
+  padding: 0 4px;
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1;
@@ -96,4 +96,76 @@
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--accent);
+}
+
+/* honeycomb of tech hexagons — sits below the distortion band, fills the card.
+   each .hex is absolutely positioned + sized in JS (Skills.jsx layout()). */
+.hexgrid {
+  position: absolute;
+  top: 224px;
+  left: 28px;
+  right: 28px;
+  /* height set in JS to the laid-out honeycomb */
+}
+
+.hex {
+  position: absolute;
+  cursor: default;
+  will-change: transform, opacity;
+}
+
+/* the glass-outline hexagon cell + the ember glyph, drawn as one SVG so the
+   stroke renders crisply and the whole thing can glow as a unit */
+.hex-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.35));
+  transition: transform 0.25s ease, filter 0.25s ease;
+}
+.hex-cell {
+  fill: rgba(var(--accent-rgb), 0.05);
+  stroke: rgba(var(--accent-rgb), 0.38);
+  stroke-width: 1.2;
+  transition: fill 0.25s ease, stroke 0.25s ease;
+}
+.hex-glyph path {
+  fill: var(--accent); /* ember monochrome — same material as the distortion */
+}
+.hex-text {
+  fill: var(--accent);
+  font-family: var(--mono);
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+/* hover: lift + intensify (transform on the SVG, so it never fights the GSAP
+   entrance which animates the .hex wrapper) */
+.hex:hover .hex-svg {
+  transform: translateY(-6px) scale(1.06);
+  filter: drop-shadow(0 0 12px rgba(var(--accent-rgb), 0.7));
+}
+.hex:hover .hex-cell {
+  fill: rgba(var(--accent-rgb), 0.12);
+  stroke: var(--accent);
+}
+
+/* tech name, revealed under the hexagon on hover */
+.hex-name {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.hex:hover .hex-name {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }

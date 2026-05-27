@@ -23,7 +23,7 @@ export default function Hero() {
           // the scrub finishes the expansion partway through the pin; the CSS
           // sticky keeps the bento centered for the REST of the pin, so it sits
           // fully expanded (the "dwell") before it scrolls off.
-          end: '+=65%',
+          end: '+=75%',
           // rigidly tied to scroll position (no catch-up lag) so the bento is
           // never still "growing" after its scroll point — Lenis smooths scroll
           scrub: true,

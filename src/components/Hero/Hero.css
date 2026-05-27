@@ -3,7 +3,7 @@
    expansion at 65vh, so the bento is full + centered for ~35vh before it exits. */
 .hero-pin {
   position: relative;
-  height: 200vh;
+  height: 180vh;
   z-index: 5;
 }
 
