@@ -1,44 +1,48 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { TECH } from './techIcons'
 import './Skills.css'
 
 gsap.registerPlugin(ScrollTrigger)
 
-// the same ramp the source uses for the MAANAS glitch (dark → bright)
+// the MAANAS-glitch ramp (dark → bright)
 const RAMP = ' .,-:;!=*#@'
+// the spray uses DIFFERENT glyphs (none of which are in RAMP) + a hot colour,
+// so the ascii flung from the cursor reads as distinct ejecta, not the field
+const SPRAY_RAMP = ' ~+xX'
 const ROWS = 6 // height of the band, in character rows
-const FPS = 20 // glitch refresh rate (choppy = glitchy)
-const CHURN = 0.4 // fraction of cells re-randomised each frame
-const BIAS = 1.5 // >1 leans toward the sparse end of the ramp (distortion, not static)
+const FPS = 30
+const CHURN = 0.3 // base fraction of cells re-randomised each frame
+const BIAS = 1.4 // >1 leans toward the sparse end of the ramp
 
-// ── honeycomb layout knobs ──────────────────────────────────────────────
-const HEX_RATIO = 1.15 // pointy-top hex height / width
-const COL_TARGET = 110 // ~px per column; smaller = more, tinier hexes (→3 rows)
-const ROW_OVERLAP = 0.75 // vertical step as a fraction of hex height (interlock)
-
-// ── drip / physics knobs ────────────────────────────────────────────────
-const DRIP_EACH = 0.07 // stagger between hexes dripping out (s)
-const DRIP_LEAD = 0.14 // how long the bloom builds before the hex emerges (s)
-const BLOOM_R = 7.5 // radial bloom radius on the bar, in band columns
-const BLOOM_MS = 560 // how long each bloom lives (ms)
-const FALL_DUR = 1.15 // fall + bounce duration (s)
+// the cursor "pushes" the ascii away — like a hand parting a stream of water,
+// and sprays a stream of ascii out of its tip (the thing doing the pushing)
+const DEFAULTS = {
+  radius: 12, // how far the push reaches (band columns)
+  strength: 12, // how hard cells are shoved outward (→ void size)
+  flow: 10, // ascii particles sprayed from the cursor per frame
+  speed: 24, // how fast they fly outward (cols/sec, visual)
+}
 
 export default function Skills() {
   const sectionRef = useRef(null)
   const stripRef = useRef(null)
-  const gridRef = useRef(null)
-  // shared between effects: live blooms on the bar, band metrics, hex slots
-  const dripsRef = useRef([])
-  const metaRef = useRef({ cols: 0 })
-  const slotsRef = useRef([])
+  const sprayRef = useRef(null)
+  const mouseRef = useRef({ col: 0, row: 0, active: false })
+  const metaRef = useRef({ charW: 6.6, rowH: 11, padL: 4 })
 
-  // the isolated distortion band (now with radial blooms where hexes drip out)
+  const [cfg, setCfg] = useState(DEFAULTS)
+  const cfgRef = useRef(cfg)
+  useEffect(() => {
+    cfgRef.current = cfg
+  }, [cfg])
+
+  // the band: a churning ascii field that PARTS around the cursor
   useEffect(() => {
     const el = stripRef.current
     let cols = 0
     let grid = []
+    let particles = [] // ascii spraying out of the cursor tip
     let raf = 0
     let last = 0
     const frameMs = 1000 / FPS
@@ -47,9 +51,6 @@ export default function Skills() {
     const build = () => {
       const cs = getComputedStyle(el)
       const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
-      // MEASURE the real glyph advance instead of assuming 0.6em — Geist Mono is
-      // narrower than that, which under-counted columns and left a gap on the
-      // right. Render a known run of chars in the band's own font and divide.
       const meas = document.createElement('span')
       meas.textContent = '0'.repeat(200)
       meas.style.cssText =
@@ -59,11 +60,12 @@ export default function Skills() {
       el.appendChild(meas)
       const charW = meas.getBoundingClientRect().width / 200 || 6.6
       el.removeChild(meas)
-      // Overshoot by a few columns so the line ALWAYS runs past the right edge,
-      // then overflow:hidden clips it flush. This can't come up short the way an
-      // exact column count can if the measured advance is off by a hair.
       cols = Math.max(1, Math.ceil((el.clientWidth - padX) / charW) + 6)
-      metaRef.current.cols = cols
+      metaRef.current = {
+        charW,
+        rowH: el.clientHeight / ROWS,
+        padL: parseFloat(cs.paddingLeft),
+      }
       grid = Array.from({ length: ROWS }, () =>
         Array.from({ length: cols }, randIdx)
       )
@@ -72,43 +74,115 @@ export default function Skills() {
     const ro = new ResizeObserver(build)
     ro.observe(el)
 
-    const centerRow = (ROWS - 1) / 2
     const tick = (t) => {
       if (t - last >= frameMs) {
+        const dt = last ? Math.min(0.05, (t - last) / 1000) : frameMs / 1000
         last = t
-        const tnow = performance.now()
-        // prune dead blooms
-        const drips = dripsRef.current
-        if (drips.length)
-          dripsRef.current = drips.filter((d) => tnow - d.t0 <= BLOOM_MS)
-        const live = dripsRef.current
+        // churn the underlying field
+        for (let y = 0; y < ROWS; y++)
+          for (let x = 0; x < cols; x++)
+            if (Math.random() < CHURN) grid[y][x] = randIdx()
 
-        let out = ''
+        const m = mouseRef.current
+        const R = cfgRef.current.radius
+        const strength = cfgRef.current.strength
+        const flow = cfgRef.current.flow
+        const speed = cfgRef.current.speed
+        const aspect = metaRef.current.rowH / metaRef.current.charW // ≈1.8
+
+        // advance the stream sprayed from the cursor; cull the dead
+        for (let p = 0; p < particles.length; p++) {
+          const pt = particles[p]
+          pt.x += pt.vx * dt
+          pt.y += pt.vy * dt
+          pt.age += dt
+        }
+        if (particles.length) particles = particles.filter((p) => p.age < p.life)
+        // spawn fresh ascii at the cursor tip, flying radially outward
+        if (m.active) {
+          for (let s = 0; s < flow; s++) {
+            // bias the spray HORIZONTALLY (left/right) — the stream splits in
+            // two around the cursor and travels far across the thin band.
+            const dir = Math.random() < 0.5 ? 0 : Math.PI
+            const spread = (Math.random() - 0.5) * 0.9 // ±~0.45 rad vertical fan
+            const ang = dir + spread
+            const spd = speed * (0.5 + Math.random())
+            particles.push({
+              x: m.col + Math.cos(ang) * 0.8,
+              y: m.row + (Math.sin(ang) * 0.8) / aspect,
+              vx: Math.cos(ang) * spd,
+              vy: (Math.sin(ang) * spd) / aspect,
+              age: 0,
+              life: 0.4 + Math.random() * 0.6,
+            })
+          }
+        }
+
+        // build the warped field into a render grid (idx per cell)
+        const render = []
         for (let y = 0; y < ROWS; y++) {
-          const row = grid[y]
-          let line = ''
+          const r = new Array(cols)
           for (let x = 0; x < cols; x++) {
-            if (Math.random() < CHURN) row[x] = randIdx()
-            let chIdx = row[x]
-            // radial bloom: brighten + radiate outward at each active drip point
-            for (let k = 0; k < live.length; k++) {
-              const d = live[k]
-              const age = (tnow - d.t0) / BLOOM_MS // 0..1
-              const r = BLOOM_R * (1 - Math.pow(1 - age, 3)) // easeOut growth
-              const dx = x - d.col
-              const dyl = (y - centerRow) * 2.2 // char cells are tall → scale Y
-              const dist = Math.sqrt(dx * dx + dyl * dyl)
-              if (dist < r) {
-                const intensity = (1 - dist / r) * (1 - age * 0.4)
-                const bright = RAMP.length - 1 - Math.floor((1 - intensity) * 5)
-                if (bright > chIdx) chIdx = Math.max(0, Math.min(RAMP.length - 1, bright))
+            let idx = grid[y][x]
+            if (m.active) {
+              const vdx = x - m.col
+              const vdy = (y - m.row) * aspect // circular on screen
+              const dist = Math.sqrt(vdx * vdx + vdy * vdy)
+              if (dist < R) {
+                // pull the SOURCE inward → content appears shoved outward (void)
+                const srcDist = dist - strength * (1 - dist / R)
+                if (srcDist <= 0.6) {
+                  idx = 0 // the parted void
+                } else {
+                  const nx = vdx / dist
+                  const ny = vdy / dist
+                  let sx = Math.round(m.col + nx * srcDist)
+                  let sy = Math.round(m.row + (ny * srcDist) / aspect)
+                  sx = sx < 0 ? 0 : sx >= cols ? cols - 1 : sx
+                  sy = sy < 0 ? 0 : sy >= ROWS ? ROWS - 1 : sy
+                  idx = grid[sy][sx]
+                }
               }
             }
-            line += RAMP[chIdx]
+            r[x] = idx
           }
+          render[y] = r
+        }
+
+        // base warped field → the band (ember orange)
+        let out = ''
+        for (let y = 0; y < ROWS; y++) {
+          const r = render[y]
+          let line = ''
+          for (let x = 0; x < cols; x++) line += RAMP[r[x]]
           out += line + '\n'
         }
         el.textContent = out
+
+        // sprayed ascii → a SEPARATE overlay layer, hot gold + different glyphs,
+        // so it reads clearly against the field and marks the cursor tip
+        const sprayEl = sprayRef.current
+        if (sprayEl) {
+          const sgi = Array.from({ length: ROWS }, () => new Array(cols).fill(0))
+          for (let p = 0; p < particles.length; p++) {
+            const pt = particles[p]
+            const px = Math.round(pt.x)
+            const py = Math.round(pt.y)
+            if (px >= 0 && px < cols && py >= 0 && py < ROWS) {
+              const lifeFrac = 1 - pt.age / pt.life
+              const si = Math.max(1, Math.round(lifeFrac * (SPRAY_RAMP.length - 1)))
+              if (si > sgi[py][px]) sgi[py][px] = si // brighter spark wins
+            }
+          }
+          let sout = ''
+          for (let y = 0; y < ROWS; y++) {
+            const r = sgi[y]
+            let line = ''
+            for (let x = 0; x < cols; x++) line += SPRAY_RAMP[r[x]]
+            sout += line + '\n'
+          }
+          sprayEl.textContent = sout
+        }
       }
       raf = requestAnimationFrame(tick)
     }
@@ -119,86 +193,35 @@ export default function Skills() {
     }
   }, [])
 
-  // honeycomb positioning — compute each hexagon's slot, plus the y-offset that
-  // places it up at the bar (its drip origin) and the bar column it drips from.
-  useLayoutEffect(() => {
-    const grid = gridRef.current
-    const card = grid.closest('.skills-card')
-    const band = card.querySelector('.distortion')
-    const hexes = Array.from(grid.querySelectorAll('.hex'))
-
-    const layout = () => {
-      const W = grid.clientWidth
-      if (!W) return
-      const cols = Math.max(5, Math.round(W / COL_TARGET))
-      const hStep = W / (cols + 0.5) // half-col spare for the odd-row offset
-      const hexW = hStep * 0.96
-      const hexH = hexW * HEX_RATIO
-      const vStep = hexH * ROW_OVERLAP
-
-      // bar centre + grid origin in CARD coordinates (for the drip start)
-      const bandCenterY = band.offsetTop + band.offsetHeight / 2
-      const gridTop = grid.offsetTop
-      const gridLeft = grid.offsetLeft
-      const cardW = card.clientWidth
-
-      const rows = Math.ceil(hexes.length / cols)
-      const base = Math.floor(hexes.length / rows)
-      const extra = hexes.length % rows
-      const counts = Array.from({ length: rows }, (_, r) =>
-        r < extra ? base + 1 : base
-      )
-
-      const slots = []
-      let idx = 0
-      let bottom = 0
-      for (let r = 0; r < rows; r++) {
-        const count = counts[r]
-        const rowW = (count - 1) * hStep + hexW
-        // keep the interlocked block centered: phase alternate rows ±¼ step
-        const phase = (r % 2 ? 1 : -1) * (hStep / 4)
-        const x0 = (W - rowW) / 2 + phase
-        const y = r * vStep
-        for (let c = 0; c < count; c++, idx++) {
-          const left = x0 + c * hStep
-          const el = hexes[idx]
-          el.style.width = `${hexW}px`
-          el.style.height = `${hexH}px`
-          el.style.left = `${left}px`
-          el.style.top = `${y}px`
-          // drip start: lift the hex up so it begins at the bar, falls to slot
-          const slotCenterY = gridTop + y + hexH / 2
-          const centerXfrac = (gridLeft + left + hexW / 2) / cardW
-          slots[idx] = { startY: bandCenterY - slotCenterY, frac: centerXfrac }
+  // track the cursor in band-grid coordinates
+  useEffect(() => {
+    const el = stripRef.current
+    const onMove = (e) => {
+      const rect = el.getBoundingClientRect()
+      const margin = 28
+      if (
+        e.clientX >= rect.left - margin &&
+        e.clientX <= rect.right + margin &&
+        e.clientY >= rect.top - margin &&
+        e.clientY <= rect.bottom + margin
+      ) {
+        const { charW, rowH, padL } = metaRef.current
+        mouseRef.current = {
+          col: (e.clientX - rect.left - padL) / charW,
+          row: (e.clientY - rect.top) / rowH,
+          active: true,
         }
-        bottom = y + hexH
+      } else {
+        mouseRef.current.active = false
       }
-      grid.style.height = `${bottom}px`
-      slotsRef.current = slots
     }
-
-    layout()
-    const ro = new ResizeObserver(layout)
-    ro.observe(grid)
-    return () => ro.disconnect()
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
   }, [])
 
-  // reveal + drip: card slides up, the band blooms in, then each hexagon blooms
-  // a radial distortion on the bar and drips out of it, falling with weight.
+  // reveal: card slides up, band wipes in from the centre
   useEffect(() => {
     const ctx = gsap.context(() => {
-      const hexes = gsap.utils.toArray('.hex')
-      const order = gsap.utils.shuffle(hexes.map((_, i) => i)) // organic order
-
-      const pushBloom = (i) => {
-        const s = slotsRef.current[i]
-        if (!s) return
-        dripsRef.current.push({
-          col: Math.round(s.frac * metaRef.current.cols),
-          t0: performance.now(),
-        })
-      }
-
       const tl = gsap.timeline({
         scrollTrigger: {
           trigger: '.skills-card',
@@ -206,60 +229,21 @@ export default function Skills() {
           toggleActions: 'restart none none reset',
         },
       })
-      // the card slides up into place (no grow-from-centre, no fade)
-      tl.from('.skills-card', { y: 70, duration: 0.9, ease: 'power3.out' })
-        // the distortion band fades in from the centre outwards
-        .fromTo(
-          '.distortion',
-          { clipPath: 'inset(0% 50% 0% 50%)', opacity: 0 },
-          {
-            clipPath: 'inset(0% 0% 0% 0%)',
-            opacity: 1,
-            duration: 0.8,
-            ease: 'power2.out',
-          },
-          '-=0.4'
-        )
-
-      // each hexagon: a bloom forms on the bar, then it drips out and falls with
-      // a real bounce + a roll that settles (weight).
-      const dripStart = tl.duration() - 0.1
-      order.forEach((hi, k) => {
-        const hex = hexes[hi]
-        const s = slotsRef.current[hi] || { startY: -140 }
-        const at = dripStart + k * DRIP_EACH
-        // 1) bloom on the bar at this hex's column
-        tl.call(pushBloom, [hi], at)
-        // 2) drip + fall + bounce (starts after the bloom has begun radiating)
-        tl.fromTo(
-          hex,
-          { y: s.startY },
-          { y: 0, duration: FALL_DUR, ease: 'bounce.out' },
-          at + DRIP_LEAD
-        )
-        // 3) materialise as it comes down
-        tl.fromTo(
-          hex,
-          { opacity: 0, scale: 0.45 },
-          { opacity: 1, scale: 1, duration: 0.45, ease: 'power2.out' },
-          at + DRIP_LEAD
-        )
-        // 4) roll/tumble that settles upright (weight on landing)
-        tl.fromTo(
-          hex,
-          { rotation: gsap.utils.random(-40, 40) },
-          { rotation: 0, duration: FALL_DUR * 0.85, ease: 'back.out(2)' },
-          at + DRIP_LEAD
-        )
-      })
+      tl.from('.skills-card', { y: 70, duration: 0.9, ease: 'power3.out' }).fromTo(
+        '.distortion',
+        { clipPath: 'inset(0% 50% 0% 50%)', opacity: 0 },
+        { clipPath: 'inset(0% 0% 0% 0%)', opacity: 1, duration: 0.8, ease: 'power2.out' },
+        '-=0.4'
+      )
     }, sectionRef)
     return () => ctx.revert()
   }, [])
 
   return (
     <section className="skills-section" ref={sectionRef}>
+      {import.meta.env.DEV && <Knobs cfg={cfg} setCfg={setCfg} />}
+
       <article className="skills-card">
-        {/* heading on top, like the About / Gallery tiles */}
         <div className="skills-head">
           <div className="skills-top">
             <span>~/skills</span>
@@ -267,44 +251,45 @@ export default function Skills() {
           <h3>Skills &amp; Technologies</h3>
         </div>
 
-        {/* isolated glitch/distortion band, below the heading, full width */}
         <pre ref={stripRef} className="distortion" aria-hidden="true" />
-
-        {/* the honeycomb of tech hexagons that drip out of the distortion */}
-        <div ref={gridRef} className="hexgrid">
-          {TECH.map((t) => (
-            <div className="hex" key={t.label} data-label={t.label}>
-              <svg className="hex-svg" viewBox="0 0 100 115" aria-hidden="true">
-                <polygon
-                  className="hex-cell"
-                  points="50,1.5 98,29.5 98,85.5 50,113.5 2,85.5 2,29.5"
-                />
-                {t.path ? (
-                  <g
-                    className="hex-glyph"
-                    transform="translate(29.5,36) scale(1.71)"
-                  >
-                    <path d={t.path} />
-                  </g>
-                ) : (
-                  <text
-                    className="hex-text"
-                    x="50"
-                    y="61"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                  >
-                    {t.text}
-                  </text>
-                )}
-              </svg>
-              <span className="hex-name">{t.label}</span>
-            </div>
-          ))}
-        </div>
+        <pre ref={sprayRef} className="spray" aria-hidden="true" />
 
         <span className="skills-label">— SKILLS</span>
       </article>
     </section>
+  )
+}
+
+/* ── dev-only control panel ───────────────────────────────────────────── */
+const SLIDERS = [
+  ['radius', 'reach', 4, 40, 1, ''],
+  ['strength', 'push', 2, 40, 1, ''],
+  ['flow', 'flow', 0, 40, 1, ''],
+  ['speed', 'speed', 2, 80, 1, ''],
+]
+
+function Knobs({ cfg, setCfg }) {
+  const set = (k) => (v) => setCfg((c) => ({ ...c, [k]: v }))
+  return (
+    <div className="knobs">
+      <div className="knobs-title">◆ push knobs</div>
+      {SLIDERS.map(([key, label, min, max, step, unit]) => (
+        <label className="knob" key={key}>
+          <span>{label}</span>
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={cfg[key]}
+            onChange={(e) => set(key)(parseFloat(e.target.value))}
+          />
+          <b>
+            {cfg[key]}
+            {unit}
+          </b>
+        </label>
+      ))}
+    </div>
   )
 }
