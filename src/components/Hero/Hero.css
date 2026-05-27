@@ -1,10 +1,13 @@
-/* tall section that gives the sticky viewport room to scrub through */
+/* tall section; the sticky child stays centered while the scrub runs through it.
+   sticky releases at (height − 100vh) = 100vh of scroll; the scrub finishes the
+   expansion at 65vh, so the bento is full + centered for ~35vh before it exits. */
 .hero-pin {
   position: relative;
-  height: 250vh;
+  height: 200vh;
   z-index: 5;
 }
 
+/* sticky keeps the bento locked dead-center for the whole pin while it expands */
 .hero-sticky {
   position: sticky;
   top: 0;

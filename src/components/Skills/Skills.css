@@ -1,0 +1,99 @@
+.skills-section {
+  position: relative;
+  z-index: 5;
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start; /* card sits below the top clearance */
+  justify-content: center;
+  /* big top clearance so the card's reveal only fires AFTER the bento (which
+     expands + dwells in the pinned hero above) has scrolled off-screen */
+  padding: 70vh 24px 18vh;
+}
+
+/* same glass card language as About / Gallery, but as wide as the two of them
+   combined: 2×46% tiles + the 32px gap, aligned to the same edges */
+.skills-card {
+  position: relative;
+  width: calc(92vw - 12px);
+  height: 72vh;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(15, 12, 10, 0.5);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+}
+
+/* heading group at the top (matches About / Gallery placement) */
+.skills-head {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+  right: 28px;
+}
+.skills-top {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.skills-card h3 {
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: clamp(26px, 3vw, 40px);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+/* the isolated distortion band — sits below the heading, spans the full width,
+   feathered top + bottom so it reads as a contained glitch strip */
+.distortion {
+  position: absolute;
+  top: 124px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  white-space: pre;
+  overflow: hidden;
+  color: var(--accent);
+  user-select: none;
+  text-shadow:
+    0 0 1px rgba(var(--accent-rgb), 0.7),
+    0 0 10px rgba(var(--accent-rgb), 0.5),
+    0 0 26px rgba(255, 180, 80, 0.3);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 28%,
+    #000 72%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 28%,
+    #000 72%,
+    transparent
+  );
+}
+
+.skills-label {
+  position: absolute;
+  bottom: 18px;
+  left: 28px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+}

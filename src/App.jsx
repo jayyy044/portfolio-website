@@ -7,6 +7,7 @@ import Atmosphere from './components/Atmosphere/Atmosphere'
 import Background from './components/Background/Background'
 import Navbar from './components/Navbar/Navbar'
 import Hero from './components/Hero/Hero'
+import Skills from './components/Skills/Skills'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -32,6 +33,7 @@ export default function App() {
       <Navbar />
 
       <Hero />
+      <Skills />
     </>
   )
 }
