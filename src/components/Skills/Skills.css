@@ -123,6 +123,15 @@
   );
 }
 
+/* the small skill that slides down out of the simulated poke */
+.skill-drop {
+  position: absolute;
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
 .skills-label {
   position: absolute;
   bottom: 18px;
