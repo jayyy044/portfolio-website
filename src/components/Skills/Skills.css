@@ -123,13 +123,12 @@
   );
 }
 
-/* the small skill that slides down out of the simulated poke */
-.skill-drop {
+/* canvas the skill drops onto (physics + trail/swirls/impact) */
+.drop-canvas {
   position: absolute;
-  z-index: 4;
-  opacity: 0;
+  inset: 0;
+  z-index: 3;
   pointer-events: none;
-  will-change: transform, opacity;
 }
 
 .skills-label {

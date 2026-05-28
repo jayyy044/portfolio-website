@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { TECH } from './techIcons'
@@ -24,21 +24,31 @@ const DEFAULTS = {
   flow: 25, // ascii particles sprayed from the cursor per frame
   speed: 30, // how fast they fly outward (cols/sec, visual)
   startMs: 200, // delay AFTER the bar finishes revealing before skills begin
+  gravity: 0.2, // drop physics — accel per frame (from the falling-ball demo)
+  bounce: 0.4, // drop physics — restitution on ground contact
+  dropMs: 650, // time the skill takes to slide down + fade in, THEN it drops
+  fallSpeed: 0.8, // time-scale on the fall (higher = falls faster)
 }
 
 // a SIMULATED poke on the bar: the parting + spray fire here on their own, and
 // one (smaller) skill slides down + fades in out of that point.
 const SKILL = TECH.find((t) => t.label === 'Python')
-const SIM_FRAC = 0.5 // where on the bar the simulated cursor sits (fraction)
-const SKILL_W = 54 // smaller than the honeycomb's full 96
+// full-colour logo (devicon two-tone), not the monochrome simple-icons glyph
+const SKILL_LOGO =
+  'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg'
+const SKILL_W = 54 // hexagon width (px) — height derived pointy-top
 const SKILL_H = SKILL_W * 1.15
-const SLIDE = 64 // how far the skill slides down from the bar point
-const POKE_DX = 0 // fine-tune: shift the poke left/right relative to the hex (px)
+const POKE_DX = 0 // fine-tune: shift the bar disturbance left/right (px)
+const SKILL_DX = 0 // fine-tune: shift the skill under the visible disturbance (px)
+const FORM_START_DY = 24 // skill starts this far under the bar centre
+const FORM_END_DY = 70 // …slides down to here while fading in, then drops
 
 export default function Skills() {
   const sectionRef = useRef(null)
   const stripRef = useRef(null)
   const sprayRef = useRef(null)
+  const canvasRef = useRef(null)
+  const readyRef = useRef(false) // true once the bar has revealed + start delay
   const simRef = useRef({ col: 0, row: 0, active: false }) // code-driven poke
   const metaRef = useRef({ charW: 6.6, rowH: 11, padL: 4 })
 
@@ -85,6 +95,12 @@ export default function Skills() {
     build()
     const ro = new ResizeObserver(build)
     ro.observe(el)
+    // The webfont may load AFTER the first build → the fallback glyph is ~9%
+    // narrower, so charW (and every column→pixel mapping) comes out wrong and
+    // the disturbance renders offset from where the skill drops. Re-measure
+    // once fonts are ready so the bar + skill line up.
+    let alive = true
+    if (document.fonts?.ready) document.fonts.ready.then(() => alive && build())
 
     const tick = (t) => {
       if (t - last >= frameMs) {
@@ -201,88 +217,33 @@ export default function Skills() {
     }
     raf = requestAnimationFrame(tick)
     return () => {
+      alive = false
       cancelAnimationFrame(raf)
       ro.disconnect()
     }
   }, [])
 
-  // position the (small) skill at the sim point — its rest spot below the bar
-  useLayoutEffect(() => {
-    const card = sectionRef.current.querySelector('.skills-card')
-    const band = card.querySelector('.distortion')
-    const drop = card.querySelector('.skill-drop')
-
-    const layout = () => {
-      const cardW = card.clientWidth
-      const barY = band.offsetTop + band.offsetHeight / 2
-      drop.style.width = `${SKILL_W}px`
-      drop.style.height = `${SKILL_H}px`
-      drop.style.left = `${SIM_FRAC * cardW - SKILL_W / 2}px`
-      drop.style.top = `${barY + SLIDE - SKILL_H / 2}px`
-    }
-    layout()
-    const ro = new ResizeObserver(layout)
-    ro.observe(card)
-    return () => ro.disconnect()
-  }, [])
-
-  // reveal the card + bar, THEN run the looping poke/drop. The loop must NOT
-  // start until the distortion bar has finished rendering in.
+  // reveal the card + bar, then (after the start delay) ARM the physics drop
   useEffect(() => {
-    let startCall = null // delayed call that kicks off the loop after the reveal
+    let startCall = null
     const ctx = gsap.context(() => {
       const card = sectionRef.current.querySelector('.skills-card')
-      const drop = card.querySelector('.skill-drop')
-
-      // pick a fresh random spot; derive the poke COLUMN from the skill's exact
-      // centre pixel (band padding + glyph width) so the x's centre on the hex.
-      const pickSpot = () => {
-        const frac = 0.2 + Math.random() * 0.6
-        const cx = frac * card.clientWidth // skill centre, in card px
-        const { padL, charW } = metaRef.current
-        simRef.current = {
-          col: (cx + POKE_DX - padL) / charW,
-          row: (ROWS - 1) / 2,
-          active: true,
-        }
-        drop.style.left = `${cx - SKILL_W / 2}px`
+      let armed = false
+      const arm = () => {
+        if (armed) return
+        armed = true
+        // wait `startMs` after the bar has fully revealed before drops begin
+        startCall = gsap.delayedCall(cfgRef.current.startMs / 1000, () => {
+          readyRef.current = true
+        })
       }
-      const release = () => {
-        simRef.current.active = false
-      }
-
-      // the looping poke + drop — built PAUSED, started only after the reveal
-      const loop = gsap.timeline({ repeat: -1, repeatDelay: 0.7, paused: true })
-      loop
-        .call(pickSpot, null, 0)
-        // 0.0–0.55s: the disturbance + x's generate ALONE at the spot
-        // 0.55s: the skill fades in + slides down UNDER the x's
-        .fromTo(
-          '.skill-drop',
-          { y: -SLIDE, opacity: 0 },
-          { y: 0, opacity: 1, duration: 1.0, ease: 'power2.out' },
-          0.55
-        )
-        // x's keep spraying above the skill through the hold, then release + fade
-        .call(release, null, 2.8)
-        .to('.skill-drop', { opacity: 0, duration: 0.5 }, 2.8)
-
-      let started = false
-      const startLoop = () => {
-        if (started) return
-        started = true
-        // wait `startMs` after the bar has fully revealed before the first skill
-        startCall = gsap.delayedCall(cfgRef.current.startMs / 1000, () => loop.play(0))
-      }
-
-      // reveal: card slides up, band wipes in — the loop starts on its completion
       const reveal = gsap.timeline({
         scrollTrigger: {
           trigger: '.skills-card',
           start: 'top 75%',
           toggleActions: 'restart none none reset',
         },
-        onComplete: startLoop,
+        onComplete: arm,
       })
       reveal
         .from('.skills-card', { y: 70, duration: 0.9, ease: 'power3.out' })
@@ -292,19 +253,201 @@ export default function Skills() {
           { clipPath: 'inset(0% 0% 0% 0%)', opacity: 1, duration: 0.8, ease: 'power2.out' },
           '-=0.4'
         )
-
-      // robustness: if already in view on (re)build (HMR / loaded scrolled here),
-      // jump the reveal to the end and start the loop — nothing gets stranded.
+      // robustness: already in view on (re)build (HMR / loaded scrolled here)
       requestAnimationFrame(() => {
         if (card.getBoundingClientRect().top < window.innerHeight * 0.75) {
           reveal.progress(1)
-          startLoop()
+          arm()
         }
       })
     }, sectionRef)
     return () => {
       startCall?.kill()
       ctx.revert()
+    }
+  }, [])
+
+  // the drop — the skill forms under the bar, then (50ms later) FALLS with
+  // gravity + bounce (falling-ball demo). Only the straight speed lines are
+  // kept (no trail / swirls / shockwave); a small screen-shake on impact stays.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const card = sectionRef.current.querySelector('.skills-card')
+    const band = card.querySelector('.distortion')
+    const c = canvas.getContext('2d')
+
+    const logo = new Image()
+    logo.src = SKILL_LOGO
+
+    let W = 0
+    let H = 0
+    let barY = 0
+    let groundY = 0
+    const size = () => {
+      const dpr = Math.min(2, window.devicePixelRatio || 1)
+      W = card.clientWidth
+      H = card.clientHeight
+      canvas.width = Math.round(W * dpr)
+      canvas.height = Math.round(H * dpr)
+      canvas.style.width = `${W}px`
+      canvas.style.height = `${H}px`
+      c.setTransform(dpr, 0, 0, dpr, 0, 0)
+      barY = band.offsetTop + band.offsetHeight / 2
+      groundY = H - 56
+    }
+    size()
+    const ro = new ResizeObserver(size)
+    ro.observe(card)
+
+    const R = SKILL_H / 2
+    let ball = null
+    let lines = [] // straight speed lines beside the ball as it falls
+    let shake = 0
+    let phase = 'idle'
+    let formA = 0
+    let formT = 0
+    let restT = 0
+    let idleT = 0
+    let raf = 0
+
+    const spawn = () => {
+      const frac = 0.2 + Math.random() * 0.6
+      const x = frac * W // disturbance spawn point on the bar
+      const startY = barY + FORM_START_DY
+      ball = { x: x + SKILL_DX, y: startY, startY, restY: barY + FORM_END_DY, vy: 0, r: R }
+      phase = 'form'
+      formA = 0
+      formT = 0
+      restT = 0
+      lines = []
+      shake = 0
+      // disturbance on the bar at this column while the skill slides down
+      const { padL, charW } = metaRef.current
+      simRef.current = {
+        col: (x + POKE_DX - padL) / charW,
+        row: (ROWS - 1) / 2,
+        active: true,
+      }
+    }
+
+    const spawnLines = () => {
+      if (ball.vy < 3.5) return
+      if (Math.random() < ball.vy / 14) {
+        const side = Math.random() < 0.5 ? -1 : 1
+        lines.push({
+          // hug the hexagon: just outside its edge (~ball.r), small spread
+          x: ball.x + side * (ball.r + 2 + Math.random() * 12),
+          y: ball.y - 10 + Math.random() * 30,
+          len: 20 + Math.random() * 32 + ball.vy * 0.6,
+          life: 18,
+          max: 18,
+        })
+      }
+    }
+    const loop = () => {
+      const dt = 1 // frame tick for render/hold/rest (real-time)
+      const ts = cfgRef.current.fallSpeed // time-scale applied to the FALL only
+      const GRAV = cfgRef.current.gravity
+      const REST = cfgRef.current.bounce
+      c.clearRect(0, 0, W, H)
+      c.save()
+      if (shake > 0.2) {
+        c.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake)
+        shake *= Math.pow(0.84, dt)
+      }
+
+      if (!ball) {
+        if (readyRef.current) {
+          idleT += dt
+          if (idleT > 42) {
+            idleT = 0
+            spawn()
+          }
+        }
+      } else if (phase === 'form') {
+        // slide down from under the bar + fade in over `dropMs`, then drop
+        formT += dt
+        const dur = Math.max(1, cfgRef.current.dropMs / (1000 / 60))
+        const p = Math.min(1, formT / dur)
+        formA = p
+        const e = 1 - Math.pow(1 - p, 3) // easeOut slide
+        ball.y = ball.startY + (ball.restY - ball.startY) * e
+        if (p >= 1) {
+          phase = 'fall'
+          ball.vy = 0
+          simRef.current.active = false // release the disturbance; now it drops
+        }
+      } else if (phase === 'fall') {
+        ball.vy += GRAV * ts
+        ball.y += ball.vy * ts
+        if (ball.y + ball.r >= groundY && ball.vy > 0) {
+          const hv = ball.vy
+          ball.y = groundY - ball.r
+          if (hv < 1.3) {
+            ball.vy = 0
+            phase = 'settle'
+          } else {
+            ball.vy = -hv * REST
+            shake = Math.min(20, hv * 0.7)
+          }
+        }
+        if (ball.vy > 2) spawnLines()
+      } else if (phase === 'settle') {
+        restT += dt
+        if (restT > 80) {
+          ball = null
+          phase = 'idle'
+          idleT = 0
+        }
+      }
+
+      lines = lines.filter((l) => l.life > 0)
+      lines.forEach((l) => {
+        l.life -= dt
+      })
+
+      lines.forEach((l) => {
+        const a = (l.life / l.max) * 0.5
+        c.beginPath()
+        c.moveTo(l.x, l.y)
+        c.lineTo(l.x, l.y + l.len)
+        c.strokeStyle = `rgba(255,220,170,${a})`
+        c.lineWidth = 1.4
+        c.lineCap = 'round'
+        c.stroke()
+      })
+      if (ball) {
+        c.globalAlpha = formA
+        // the hexagon cell (pointy-top)
+        c.beginPath()
+        for (let i = 0; i < 6; i++) {
+          const ang = (Math.PI / 3) * i - Math.PI / 2
+          const px = ball.x + ball.r * Math.cos(ang)
+          const py = ball.y + ball.r * Math.sin(ang)
+          if (i) c.lineTo(px, py)
+          else c.moveTo(px, py)
+        }
+        c.closePath()
+        c.fillStyle = 'rgba(255,111,26,0.05)'
+        c.fill()
+        c.strokeStyle = 'rgba(255,111,26,0.5)'
+        c.lineWidth = 1.4
+        c.stroke()
+        // the full-colour logo
+        if (logo.complete && logo.naturalWidth) {
+          const s = ball.r * 1.05
+          c.drawImage(logo, ball.x - s / 2, ball.y - s / 2, s, s)
+        }
+        c.globalAlpha = 1
+      }
+
+      c.restore()
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
     }
   }, [])
 
@@ -323,18 +466,8 @@ export default function Skills() {
         <pre ref={stripRef} className="distortion" aria-hidden="true" />
         <pre ref={sprayRef} className="spray" aria-hidden="true" />
 
-        {/* one small skill that slides down + fades in from the sim poke */}
-        <div className="skill-drop" data-label={SKILL.label}>
-          <svg className="hex-svg" viewBox="0 0 100 115" aria-hidden="true">
-            <polygon
-              className="hex-cell"
-              points="50,1.5 98,29.5 98,85.5 50,113.5 2,85.5 2,29.5"
-            />
-            <g className="hex-glyph" transform="translate(29.5,36) scale(1.71)">
-              <path d={SKILL.path} />
-            </g>
-          </svg>
-        </div>
+        {/* the skill forms under the bar then drops with physics (canvas) */}
+        <canvas ref={canvasRef} className="drop-canvas" aria-hidden="true" />
 
         <span className="skills-label">— SKILLS</span>
       </article>
@@ -349,6 +482,10 @@ const SLIDERS = [
   ['flow', 'flow', 0, 40, 1, ''],
   ['speed', 'speed', 2, 80, 1, ''],
   ['startMs', 'start delay', 0, 3000, 100, 'ms'],
+  ['gravity', 'gravity', 0.05, 1.4, 0.05, ''],
+  ['bounce', 'bounce', 0, 0.85, 0.05, ''],
+  ['dropMs', 'drop delay', 0, 1000, 10, 'ms'],
+  ['fallSpeed', 'fall speed', 0.3, 2, 0.05, ''],
 ]
 
 function Knobs({ cfg, setCfg }) {
