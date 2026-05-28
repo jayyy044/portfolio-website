@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { SKILLS } from './skillLogos'
@@ -16,12 +16,11 @@ const FPS = 30
 const CHURN = 0.3 // base fraction of cells re-randomised each frame
 const BIAS = 1.4 // >1 leans toward the sparse end of the ramp
 
-// the cursor "pushes" the ascii away — like a hand parting a stream of water,
-// and sprays a stream of ascii out of its tip (the thing doing the pushing)
-const DEFAULTS = {
-  radius: 12, // how far the push reaches (band columns)
+// tuned constants for the bar disturbance + the drop physics
+const CFG = {
+  radius: 12, // how far the disturbance reaches (band columns)
   strength: 12, // how hard cells are shoved outward (→ void size)
-  flow: 25, // ascii particles sprayed from the cursor per frame
+  flow: 25, // ascii particles sprayed per disturbance per frame
   speed: 30, // how fast they fly outward (cols/sec, visual)
   startMs: 200, // delay AFTER the bar finishes revealing before skills begin
   gravity: 0.2, // drop physics — accel per frame (from the falling-ball demo)
@@ -43,8 +42,6 @@ const SPAWN_EVERY = 22 // frames between drops (low → more falling at once)
 const COLLIDE_ITERS = 4 // collision-resolution passes per frame (stable stacking)
 const ZONES = [0.2, 0.8, 0.5] // left / right / middle — cycled so drops spread out
 const FLOOR_GAP = 15 // skills stop this many px above the "— SKILLS" label
-const MUTED = false // TEST: flat ember-monochrome logos (like the main branch)
-const EMBER = '#ff6f1a'
 
 export default function Skills() {
   const sectionRef = useRef(null)
@@ -55,12 +52,6 @@ export default function Skills() {
   const readyRef = useRef(false) // true once the bar has revealed + start delay
   const pokesRef = useRef([]) // active bar disturbances — one per skill forming
   const metaRef = useRef({ charW: 6.6, rowH: 11, padL: 4 })
-
-  const [cfg, setCfg] = useState(DEFAULTS)
-  const cfgRef = useRef(cfg)
-  useEffect(() => {
-    cfgRef.current = cfg
-  }, [cfg])
 
   // the band: a churning ascii field that PARTS around the cursor
   useEffect(() => {
@@ -116,10 +107,10 @@ export default function Skills() {
             if (Math.random() < CHURN) grid[y][x] = randIdx()
 
         const pokes = pokesRef.current // 0+ active disturbances (one per forming skill)
-        const R = cfgRef.current.radius
-        const strength = cfgRef.current.strength
-        const flow = cfgRef.current.flow
-        const speed = cfgRef.current.speed
+        const R = CFG.radius
+        const strength = CFG.strength
+        const flow = CFG.flow
+        const speed = CFG.speed
         const aspect = metaRef.current.rowH / metaRef.current.charW // ≈1.8
 
         // advance the stream sprayed from the cursor; cull the dead
@@ -237,7 +228,7 @@ export default function Skills() {
         if (armed) return
         armed = true
         // wait `startMs` after the bar has fully revealed before drops begin
-        startCall = gsap.delayedCall(cfgRef.current.startMs / 1000, () => {
+        startCall = gsap.delayedCall(CFG.startMs / 1000, () => {
           readyRef.current = true
         })
       }
@@ -280,28 +271,9 @@ export default function Skills() {
     const band = card.querySelector('.distortion')
     const c = canvas.getContext('2d')
 
-    // pre-render an ember-monochrome silhouette of a logo (matches main branch)
-    const makeTint = (img) => {
-      const S = 128
-      const oc = document.createElement('canvas')
-      oc.width = S
-      oc.height = S
-      const octx = oc.getContext('2d')
-      const ar = img.naturalWidth / img.naturalHeight || 1
-      const dw = ar >= 1 ? S : S * ar
-      const dh = ar >= 1 ? S / ar : S
-      octx.drawImage(img, (S - dw) / 2, (S - dh) / 2, dw, dh)
-      octx.globalCompositeOperation = 'source-atop' // recolour the logo's pixels
-      octx.fillStyle = EMBER
-      octx.fillRect(0, 0, S, S)
-      return oc
-    }
     // preload every skill logo once; each drop picks one
     const logos = SKILLS.map((s) => {
       const img = new Image()
-      img.onload = () => {
-        if (MUTED) img._tint = makeTint(img)
-      }
       img.src = s.url
       return img
     })
@@ -380,9 +352,9 @@ export default function Skills() {
 
     const loop = () => {
       const dt = 1
-      const ts = cfgRef.current.fallSpeed
-      const GRAV = cfgRef.current.gravity
-      const REST = cfgRef.current.bounce
+      const ts = CFG.fallSpeed
+      const GRAV = CFG.gravity
+      const REST = CFG.bounce
       c.clearRect(0, 0, W, H)
 
       // keep dropping at random spots until every skill has fallen — then they stay
@@ -398,7 +370,7 @@ export default function Skills() {
       for (const b of balls) {
         if (b.phase !== 'form') continue
         b.formT += dt
-        const dur = Math.max(1, cfgRef.current.dropMs / (1000 / 60))
+        const dur = Math.max(1, CFG.dropMs / (1000 / 60))
         const p = Math.min(1, b.formT / dur)
         b.formA = p
         const e = 1 - Math.pow(1 - p, 3)
@@ -523,9 +495,7 @@ export default function Skills() {
         c.stroke()
         const lg = b.logo
         const box = b.r * 1.1
-        if (MUTED && lg && lg._tint) {
-          c.drawImage(lg._tint, b.x - box / 2, b.y - box / 2, box, box)
-        } else if (lg && lg.complete && lg.naturalWidth) {
+        if (lg && lg.complete && lg.naturalWidth) {
           const ar = lg.naturalWidth / lg.naturalHeight
           const dw = ar >= 1 ? box : box * ar
           const dh = ar >= 1 ? box / ar : box
@@ -591,7 +561,6 @@ export default function Skills() {
 
   return (
     <section className="skills-section" ref={sectionRef}>
-      {import.meta.env.DEV && <Knobs cfg={cfg} setCfg={setCfg} />}
 
       <article className="skills-card">
         <div className="skills-head">
@@ -612,44 +581,5 @@ export default function Skills() {
         <span className="skills-label">— SKILLS</span>
       </article>
     </section>
-  )
-}
-
-/* ── dev-only control panel ───────────────────────────────────────────── */
-const SLIDERS = [
-  ['radius', 'reach', 4, 40, 1, ''],
-  ['strength', 'push', 2, 40, 1, ''],
-  ['flow', 'flow', 0, 40, 1, ''],
-  ['speed', 'speed', 2, 80, 1, ''],
-  ['startMs', 'start delay', 0, 3000, 100, 'ms'],
-  ['gravity', 'gravity', 0.05, 1.4, 0.05, ''],
-  ['bounce', 'bounce', 0, 0.85, 0.05, ''],
-  ['dropMs', 'drop delay', 0, 1000, 10, 'ms'],
-  ['fallSpeed', 'fall speed', 0.3, 2, 0.05, ''],
-]
-
-function Knobs({ cfg, setCfg }) {
-  const set = (k) => (v) => setCfg((c) => ({ ...c, [k]: v }))
-  return (
-    <div className="knobs">
-      <div className="knobs-title">◆ push knobs</div>
-      {SLIDERS.map(([key, label, min, max, step, unit]) => (
-        <label className="knob" key={key}>
-          <span>{label}</span>
-          <input
-            type="range"
-            min={min}
-            max={max}
-            step={step}
-            value={cfg[key]}
-            onChange={(e) => set(key)(parseFloat(e.target.value))}
-          />
-          <b>
-            {cfg[key]}
-            {unit}
-          </b>
-        </label>
-      ))}
-    </div>
   )
 }
