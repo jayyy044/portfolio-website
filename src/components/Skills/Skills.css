@@ -123,12 +123,36 @@
   );
 }
 
-/* canvas the skill drops onto (physics + trail/swirls/impact) */
+/* canvas the skills pile onto (physics) — interactive so we can hover them */
 .drop-canvas {
   position: absolute;
   inset: 0;
   z-index: 3;
+}
+
+/* hover tooltip showing the skill's name, floated above the hovered hexagon —
+   matches the site's ember/gold glass language */
+.skill-tip {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-50%, -100%);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(15, 12, 10, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(var(--accent-rgb), 0.5);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  white-space: nowrap;
   pointer-events: none;
+  opacity: 0;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.5),
+    0 0 14px rgba(var(--accent-rgb), 0.2);
+  transition: opacity 0.15s ease;
 }
 
 .skills-label {
