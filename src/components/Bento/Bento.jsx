@@ -27,6 +27,9 @@ export default function Bento() {
             <span>~/gallery</span>
           </div>
           <h3>Picture Gallery</h3>
+          <p className="tile-cap">
+            shot on <span>Sony Cybershot DSC-T100</span>
+          </p>
           <Gallery />
         </div>
         <span className="tile-label">— PICTURE GALLERY</span>

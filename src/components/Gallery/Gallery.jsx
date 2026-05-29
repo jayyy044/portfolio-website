@@ -1,24 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './Gallery.css'
 
-const COUNT = 12
 const DELAY = 5000 // autoplay: ms per photo
 const STEP_DEG = 26 // degrees of dial turn per photo
 
-// 12 placeholder slides — distinct warm gradients. Swap `bg` for an <img> later.
-const SLIDES = Array.from({ length: COUNT }, (_, i) => {
-  const px = ((i * 29) % 80) + 10
-  const py = ((i * 53) % 70) + 10
-  return {
-    n: String(i + 1).padStart(2, '0'),
-    bg:
-      `radial-gradient(120% 120% at ${px}% ${py}%, rgba(255,150,60,0.55), transparent 60%),` +
-      `linear-gradient(135deg, #3a281a, #120d0a)`,
-  }
-})
-// first two slides show real photos; the rest stay placeholders for now
-SLIDES[0] = { n: '01', src: '/demo-cool.jpg' }
-SLIDES[1] = { n: '02', src: '/demopic.jpg' }
+// real photos shown on the camera screen, in order
+const PHOTOS = [
+  '/demo-cool.jpg',
+  '/demopic.jpg',
+  '/dsc03132.jpg',
+  '/dsc02991.jpg',
+  '/dsc03005.jpg',
+  '/dsc03054.jpg',
+]
+const COUNT = PHOTOS.length
+const SLIDES = PHOTOS.map((src, i) => ({ n: String(i + 1).padStart(2, '0'), src }))
 
 export default function Gallery() {
   const [index, setIndex] = useState(0)
@@ -113,16 +109,8 @@ export default function Gallery() {
             style={{ transform: `translateX(${-index * 100}%)` }}
           >
             {SLIDES.map((s) => (
-              <div
-                className="cam-slide"
-                key={s.n}
-                style={s.bg ? { background: s.bg } : undefined}
-              >
-                {s.src ? (
-                  <img className="cam-photo" src={s.src} alt="" draggable="false" />
-                ) : (
-                  <span>{s.n}</span>
-                )}
+              <div className="cam-slide" key={s.n}>
+                <img className="cam-photo" src={s.src} alt="" draggable="false" />
               </div>
             ))}
           </div>

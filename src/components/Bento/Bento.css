@@ -91,6 +91,17 @@
   color: var(--text);
 }
 
+.tile-cap {
+  margin-top: -8px;
+  font-style: italic;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.tile-cap span {
+  color: var(--amber);
+}
+
 .tile-label {
   position: absolute;
   bottom: 18px;
