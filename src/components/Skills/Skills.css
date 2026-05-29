@@ -11,10 +11,10 @@
 }
 
 /* same glass card language as About / Gallery, but as wide as the two of them
-   combined: 2×46% tiles + the 32px gap, aligned to the same edges */
+   combined: 2×48% tiles + the 32px gap, aligned to the same edges */
 .skills-card {
   position: relative;
-  width: calc(92vw - 12px);
+  width: calc(96vw - 14px);
   height: 72vh;
   border-radius: 16px;
   overflow: hidden;

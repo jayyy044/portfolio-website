@@ -37,12 +37,12 @@ export default function Hero() {
       tl.to('.bento', { gap: '32px', duration: 1 }, 0)
         .to(
           '.tile.left',
-          { width: '46%', xPercent: 0, opacity: 1, borderRadius: 16, duration: 1 },
+          { width: '48%', xPercent: 0, opacity: 1, borderRadius: 16, duration: 1 },
           0
         )
         .to(
           '.tile.right',
-          { width: '46%', xPercent: 0, opacity: 1, borderRadius: 16, duration: 1 },
+          { width: '48%', xPercent: 0, opacity: 1, borderRadius: 16, duration: 1 },
           0
         )
     }, pinRef)
