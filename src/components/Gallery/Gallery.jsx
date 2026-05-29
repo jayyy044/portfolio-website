@@ -1,132 +1,159 @@
-import { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './Gallery.css'
 
-const PER_PAGE = 6
-// placeholder "images" — each gets a varied warm highlight position so they
-// look distinct. Swap the gradient for an <img> when real images exist.
-const IMAGES = Array.from({ length: 12 }, (_, i) => ({
-  id: i + 1,
-  px: `${((i * 29) % 80) + 10}%`,
-  py: `${((i * 53) % 70) + 10}%`,
-}))
+const COUNT = 12
+const DELAY = 5000 // autoplay: ms per photo
+const STEP_DEG = 26 // degrees of dial turn per photo
+
+// 12 placeholder slides — distinct warm gradients. Swap `bg` for an <img> later.
+const SLIDES = Array.from({ length: COUNT }, (_, i) => {
+  const px = ((i * 29) % 80) + 10
+  const py = ((i * 53) % 70) + 10
+  return {
+    n: String(i + 1).padStart(2, '0'),
+    bg:
+      `radial-gradient(120% 120% at ${px}% ${py}%, rgba(255,150,60,0.55), transparent 60%),` +
+      `linear-gradient(135deg, #3a281a, #120d0a)`,
+  }
+})
+// first slide shows a real photo; the rest stay placeholders for now
+SLIDES[0] = { n: '01', src: '/demo-cool.jpg' }
 
 export default function Gallery() {
-  const [page, setPage] = useState(0)
-  const [open, setOpen] = useState(null) // global index or null
+  const [index, setIndex] = useState(0)
+  const wheelRef = useRef(null)
+  const pausedRef = useRef(false)
+  const draggingRef = useRef(false)
+  const timerRef = useRef(null)
+  const accRef = useRef(0)
+  const lastAngleRef = useRef(0)
 
-  const pages = Math.ceil(IMAGES.length / PER_PAGE)
-  const start = page * PER_PAGE
-  const visible = IMAGES.slice(start, start + PER_PAGE)
+  // autoplay; restart the countdown after any manual move
+  const startAuto = useCallback(() => {
+    clearInterval(timerRef.current)
+    timerRef.current = setInterval(() => {
+      if (pausedRef.current || draggingRef.current) return
+      setIndex((i) => (i + 1) % COUNT) // wraps 12 -> 1
+    }, DELAY)
+  }, [])
 
-  // keep the page in sync when paging through the lightbox
   useEffect(() => {
-    if (open !== null) setPage(Math.floor(open / PER_PAGE))
-  }, [open])
+    startAuto()
+    return () => clearInterval(timerRef.current)
+  }, [startAuto])
 
-  // keyboard: Esc to close, arrows to navigate the lightbox
-  useEffect(() => {
-    if (open === null) return
-    const onKey = (e) => {
-      if (e.key === 'Escape') setOpen(null)
-      else if (e.key === 'ArrowRight') setOpen((o) => (o + 1) % IMAGES.length)
-      else if (e.key === 'ArrowLeft')
-        setOpen((o) => (o - 1 + IMAGES.length) % IMAGES.length)
+  const go = useCallback((delta) => {
+    setIndex((i) => Math.max(0, Math.min(COUNT - 1, i + delta)))
+  }, [])
+
+  const jump = (i) => {
+    setIndex(i)
+    startAuto()
+  }
+
+  // ---- drag the hidden wheel in a circle to scrub ----
+  const angleAt = (e) => {
+    const r = wheelRef.current.getBoundingClientRect()
+    return (
+      (Math.atan2(
+        e.clientY - (r.top + r.height / 2),
+        e.clientX - (r.left + r.width / 2)
+      ) * 180) /
+      Math.PI
+    )
+  }
+  const onPointerDown = (e) => {
+    draggingRef.current = true
+    accRef.current = 0
+    lastAngleRef.current = angleAt(e)
+    wheelRef.current.setPointerCapture(e.pointerId)
+  }
+  const onPointerMove = (e) => {
+    if (!draggingRef.current) return
+    const a = angleAt(e)
+    let d = a - lastAngleRef.current
+    if (d > 180) d -= 360
+    if (d < -180) d += 360
+    accRef.current += d
+    lastAngleRef.current = a
+    while (accRef.current >= STEP_DEG) {
+      go(1)
+      accRef.current -= STEP_DEG
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+    while (accRef.current <= -STEP_DEG) {
+      go(-1)
+      accRef.current += STEP_DEG
+    }
+  }
+  const onPointerUp = (e) => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    try {
+      wheelRef.current.releasePointerCapture(e.pointerId)
+    } catch {}
+    startAuto()
+  }
 
-  const tint = (i) => ({ '--px': IMAGES[i].px, '--py': IMAGES[i].py })
-  const num = (i) => String(IMAGES[i].id).padStart(2, '0')
+  const pause = () => {
+    pausedRef.current = true
+  }
+  const resume = () => {
+    pausedRef.current = false
+  }
 
   return (
     <div className="gallery">
-      <div className="gallery-grid" key={page}>
-        {visible.map((img, li) => {
-          const gi = start + li
-          return (
-            <button
-              type="button"
-              className="shot"
-              key={img.id}
-              style={tint(gi)}
-              onClick={() => setOpen(gi)}
-              aria-label={`Open image ${img.id}`}
-            >
-              <span>{num(gi)}</span>
-            </button>
-          )
-        })}
-      </div>
+      <div className="cam-stage">
+        <img className="cam-img" src="/camera.png" alt="" draggable="false" />
 
-      {pages > 1 && (
-        <div className="gallery-pager">
-          <button
-            type="button"
-            className="pager-btn"
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={page === 0}
-            aria-label="Previous images"
+        <div className="cam-screen" onPointerEnter={pause} onPointerLeave={resume}>
+          <div
+            className="cam-track"
+            style={{ transform: `translateX(${-index * 100}%)` }}
           >
-            ‹
-          </button>
-          <span className="pager-count">
-            {page + 1} / {pages}
-          </span>
-          <button
-            type="button"
-            className="pager-btn"
-            onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
-            disabled={page === pages - 1}
-            aria-label="Next images"
-          >
-            ›
-          </button>
-        </div>
-      )}
-
-      {open !== null &&
-        createPortal(
-          <div className="lightbox" onClick={() => setOpen(null)}>
-            <button
-              className="lb-close"
-              onClick={() => setOpen(null)}
-              aria-label="Close"
-            >
-              ✕
-            </button>
-            <button
-              className="lb-nav prev"
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpen((o) => (o - 1 + IMAGES.length) % IMAGES.length)
-              }}
-              aria-label="Previous image"
-            >
-              ‹
-            </button>
-            <figure className="lb-frame" onClick={(e) => e.stopPropagation()}>
-              <div className="lb-img" style={tint(open)}>
-                <span>{num(open)}</span>
+            {SLIDES.map((s) => (
+              <div
+                className="cam-slide"
+                key={s.n}
+                style={s.bg ? { background: s.bg } : undefined}
+              >
+                {s.src ? (
+                  <img className="cam-photo" src={s.src} alt="" draggable="false" />
+                ) : (
+                  <span>{s.n}</span>
+                )}
               </div>
-              <figcaption>
-                Image {num(open)} / {IMAGES.length}
-              </figcaption>
-            </figure>
-            <button
-              className="lb-nav next"
-              onClick={(e) => {
-                e.stopPropagation()
-                setOpen((o) => (o + 1) % IMAGES.length)
-              }}
-              aria-label="Next image"
-            >
-              ›
-            </button>
-          </div>,
-          document.body
-        )}
+            ))}
+          </div>
+
+          <div className="cam-glass" aria-hidden="true" />
+
+          <div className="cam-dots">
+            {SLIDES.map((s, i) => (
+              <button
+                type="button"
+                key={s.n}
+                className={'cam-dot' + (i === index ? ' on' : '')}
+                onClick={() => jump(i)}
+                aria-label={`Show photo ${i + 1}`}
+                aria-current={i === index || undefined}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div
+          ref={wheelRef}
+          className="cam-wheel"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onPointerEnter={pause}
+          onPointerLeave={resume}
+          aria-hidden="true"
+        />
+      </div>
     </div>
   )
 }
