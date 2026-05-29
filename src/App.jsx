@@ -8,6 +8,8 @@ import Background from './components/Background/Background'
 import Navbar from './components/Navbar/Navbar'
 import Hero from './components/Hero/Hero'
 import Skills from './components/Skills/Skills'
+import ScrollBar from './components/ScrollBar/ScrollBar'
+import { registerLenis } from './lib/scroll'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -15,6 +17,7 @@ export default function App() {
   useEffect(() => {
     // smooth-scroll (inertia on the wheel) + drive ScrollTrigger from it
     const lenis = new Lenis({ duration: 1.2, smoothWheel: true })
+    registerLenis(lenis) // share it with the navbar + custom scrollbar
     lenis.on('scroll', ScrollTrigger.update)
     const add = (time) => lenis.raf(time * 1000)
     gsap.ticker.add(add)
@@ -33,6 +36,7 @@ export default function App() {
     return () => {
       gsap.ticker.remove(add)
       lenis.destroy()
+      registerLenis(null)
     }
   }, [])
 
@@ -42,6 +46,7 @@ export default function App() {
       <Background />
 
       <Navbar />
+      <ScrollBar />
 
       <Hero />
       <Skills />

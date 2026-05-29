@@ -1,0 +1,33 @@
+/* custom scrollbar: invisible at rest, fades faintly in while scrolling, then
+   fades back out when motion settles. native bar is hidden in index.css. */
+.scrollbar {
+  position: fixed;
+  top: 0;
+  right: 5px;
+  width: 4px;
+  height: 100vh;
+  z-index: 100;
+  pointer-events: none; /* never intercept clicks/scroll */
+  opacity: 0;
+  transition: opacity 550ms ease;
+}
+
+/* "on" = currently scrolling — kept faint on purpose */
+.scrollbar.on {
+  opacity: 0.5;
+}
+
+.scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--accent-rgb), 0.95),
+    rgba(255, 205, 120, 0.95)
+  );
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.45);
+  will-change: transform, height;
+}

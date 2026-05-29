@@ -37,6 +37,17 @@ body {
   overflow-x: hidden;
 }
 
+/* hide the native scrollbar — a custom faint one (ScrollBar) appears on scroll */
+html {
+  scrollbar-width: none; /* Firefox */
+}
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 ::selection {
   background: var(--accent);
   color: var(--bg);
