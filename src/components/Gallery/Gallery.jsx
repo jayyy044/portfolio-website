@@ -16,8 +16,9 @@ const SLIDES = Array.from({ length: COUNT }, (_, i) => {
       `linear-gradient(135deg, #3a281a, #120d0a)`,
   }
 })
-// first slide shows a real photo; the rest stay placeholders for now
+// first two slides show real photos; the rest stay placeholders for now
 SLIDES[0] = { n: '01', src: '/demo-cool.jpg' }
+SLIDES[1] = { n: '02', src: '/demopic.jpg' }
 
 export default function Gallery() {
   const [index, setIndex] = useState(0)
