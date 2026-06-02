@@ -74,7 +74,7 @@ export default function OrbitScene() {
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.03).texture
     // 0.184's RoomEnvironment is brighter than 0.160's; dial the IBL back down
     // so the matte rock reads dark again (matches the prototype look).
-    scene.environmentIntensity = 0.38
+    scene.environmentIntensity = 0.25
 
     scene.add(new THREE.AmbientLight(0x1b2336, 1.35))
     const key = new THREE.DirectionalLight(0xcdd6ff, 1.1)
@@ -114,8 +114,8 @@ void main(){
   float n =fbm(p*3.0+flow);                              // higher freq -> more cloud structure on big screens
   float n2=fbm(p*5.4-flow*1.3+11.0);
   float n3=fbm(p*4.0+flow*1.8+5.0);
-  vec3 base=vec3(0.012,0.016,0.034);
-  vec3 blue=vec3(0.09,0.15,0.40);
+  vec3 base=vec3(0.009,0.012,0.028);                     // base deepened a touch for more depth (orig 0.012,0.016,0.034)
+  vec3 blue=vec3(0.09,0.15,0.40);                        // palette below is the prototype's, unchanged
   vec3 teal=vec3(0.05,0.26,0.28);
   vec3 ember=vec3(0.42,0.17,0.07);
   vec3 col=mix(base,blue,smoothstep(0.24,0.70,n));       // wider range -> colour fills more of the field
