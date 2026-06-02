@@ -90,9 +90,9 @@ export default function OrbitScene() {
     const front = new THREE.DirectionalLight(0xffffff, 2.1)
     front.position.set(1.2, 2.2, 8)
     scene.add(front)
-    // rakes the TOP ridge so it isn't a dark band
-    const top = new THREE.DirectionalLight(0xe6eeff, 1.8)
-    top.position.set(-0.6, 7, 4.5)
+    // rakes the TOP ridge so it isn't a dark band — brighter + more over the crest
+    const top = new THREE.DirectionalLight(0xe6eeff, 2.9)
+    top.position.set(-0.4, 8, 5.5)
     scene.add(top)
 
     /* ===== cursor-reactive nebula (deep space, warm + cool, drifting) ===== */
