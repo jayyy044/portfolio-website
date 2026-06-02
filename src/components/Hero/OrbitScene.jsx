@@ -70,8 +70,11 @@ export default function OrbitScene() {
     camera.position.set(0, 0, CONFIG.camZ)
 
     const pmrem = new THREE.PMREMGenerator(renderer)
-    // three@0.160 RoomEnvironment takes the renderer (matches the prototype exactly)
-    scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.03).texture
+    // three >=0.167 RoomEnvironment takes no renderer arg
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.03).texture
+    // 0.184's RoomEnvironment is brighter than 0.160's; dial the IBL back down
+    // so the matte rock reads dark again (matches the prototype look).
+    scene.environmentIntensity = 0.38
 
     scene.add(new THREE.AmbientLight(0x1b2336, 1.35))
     const key = new THREE.DirectionalLight(0xcdd6ff, 1.1)
