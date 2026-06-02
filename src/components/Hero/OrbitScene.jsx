@@ -12,6 +12,11 @@ const CONFIG = {
   camParallax: 0.3,
 }
 
+// Nebula intensity at scroll-top (dark, minimal haze) → 1.0 once scrolled in.
+const HAZE_MIN = 0.4
+// Haze reaches full over this fraction of a viewport of scroll.
+const HAZE_SCROLL_SPAN = 0.7
+
 /* ── value-noise helpers used to sculpt the asteroid surface (CPU side) ── */
 function hash3(x, y, z) {
   const n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453
@@ -100,9 +105,10 @@ export default function OrbitScene() {
       uTime: { value: 0 },
       uRes: { value: new THREE.Vector2() },
       uMouse: { value: new THREE.Vector2(0.5, 0.5) },
+      uHaze: { value: HAZE_MIN },
     }
     const nebFrag = `
-precision highp float; uniform float uTime; uniform vec2 uRes,uMouse; varying vec2 vUv;
+precision highp float; uniform float uTime; uniform vec2 uRes,uMouse; uniform float uHaze; varying vec2 vUv;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);float a=hash(i),b=hash(i+vec2(1,0)),c=hash(i+vec2(0,1)),d=hash(i+vec2(1,1));
  vec2 u=f*f*(3.-2.*f);return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);}
@@ -125,6 +131,9 @@ void main(){
   col+=ember*e*0.30;                                     // extra additive glow on the hottest cores
   // soft glow that follows the cursor
   col+=vec3(0.12,0.16,0.34)*smoothstep(0.58,0.0,distance(uv,uMouse))*0.65;
+  // fade the whole cloud field toward the dark base — minimal at scroll-top,
+  // blooms to full as you scroll (uHaze 0..1)
+  col=mix(base,col,uHaze);
   float grain=hash(uv*uRes+uTime)-0.5; col+=grain*0.025;
   gl_FragColor=vec4(col,1.0);
 }`
@@ -247,6 +256,15 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
     }
     addEventListener('mousemove', onMove)
 
+    // scroll-driven haze: dark/minimal at the top, blooms in as you scroll down
+    const hz = { cur: HAZE_MIN, target: HAZE_MIN }
+    const onScroll = () => {
+      const p = Math.min(scrollY / (innerHeight * HAZE_SCROLL_SPAN), 1)
+      hz.target = HAZE_MIN + (1 - HAZE_MIN) * p
+    }
+    addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+
     const clock = new THREE.Clock()
     let raf
     function tick() {
@@ -255,6 +273,8 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       m.x += (m.tx - m.x) * 0.05
       m.y += (m.ty - m.y) * 0.05
       neb.uMouse.value.set(0.5 + m.x, 0.5 - m.y) // nebula follows the SMOOTHED cursor, like the rock
+      hz.cur += (hz.target - hz.cur) * 0.08 // ease the haze toward its scroll target
+      neb.uHaze.value = hz.cur
       orb.rotation.y = t * 0.04 + m.x * 0.4
       orb.rotation.x = Math.sin(t * 0.15) * 0.05 - m.y * 0.25
       breathe(t)
@@ -273,6 +293,7 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       cancelAnimationFrame(raf)
       removeEventListener('resize', resize)
       removeEventListener('mousemove', onMove)
+      removeEventListener('scroll', onScroll)
       geo.dispose()
       mat.dispose()
       nebPlane.geometry.dispose()
