@@ -117,10 +117,10 @@ void main(){
   vec3 base=vec3(0.009,0.012,0.028);                     // base deepened a touch for more depth (orig 0.012,0.016,0.034)
   vec3 blue=vec3(0.09,0.15,0.40);                        // palette below is the prototype's, unchanged
   vec3 teal=vec3(0.05,0.26,0.28);
-  vec3 ember=vec3(0.42,0.17,0.07);
+  vec3 ember=vec3(0.46,0.18,0.07);                       // a touch warmer/brighter
   vec3 col=mix(base,blue,smoothstep(0.24,0.70,n));       // wider range -> colour fills more of the field
   col=mix(col,teal,smoothstep(0.44,0.84,n2)*0.7);
-  col+=ember*smoothstep(0.60,0.94,n3)*0.7;               // warm wisps = personality
+  col+=ember*smoothstep(0.56,0.94,n3)*0.85;              // warm wisps: a smidge more frequent + stronger
   // soft glow that follows the cursor
   col+=vec3(0.12,0.16,0.34)*smoothstep(0.58,0.0,distance(uv,uMouse))*0.65;
   float grain=hash(uv*uRes+uTime)-0.5; col+=grain*0.025;
