@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
 
 /* Composition for this variant — the asteroid sits low, viewed from orbit. */
 const CONFIG = {
@@ -195,7 +196,14 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
 
     /* ===== the dark rocky asteroid (organic carved sphere) ===== */
     const BR = 1.35
-    const geo = new THREE.IcosahedronGeometry(BR, 128) // high subdivision for fine rocky surface
+    // Weld the icosahedron into an indexed mesh (drop per-face uv/normal first so
+    // verts merge purely by position). Indexed geometry lets computeVertexNormals
+    // SMOOTH-shade the surface instead of flat-shading every triangle — that kills
+    // the blocky low-poly facets and reads as an organic asteroid.
+    let geo = new THREE.IcosahedronGeometry(BR, 96)
+    geo.deleteAttribute('uv')
+    geo.deleteAttribute('normal')
+    geo = mergeVertices(geo)
     const posAttr = geo.attributes.position
     const tmp = new THREE.Vector3()
     for (let i = 0; i < posAttr.count; i++) {
@@ -203,17 +211,20 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       const d = fbm3(tmp.x * 1.1 + 5, tmp.y * 1.1 + 5, tmp.z * 1.1 + 5)
       const d2 = fbm3(tmp.x * 3.4 + 20, tmp.y * 3.4 + 20, tmp.z * 3.4 + 20)
       const d3 = fbm3(tmp.x * 7.5 + 50, tmp.y * 7.5 + 50, tmp.z * 7.5 + 50)
-      // big lumps + craters + grit = asteroid
-      const r = BR * (1 + (d - 0.5) * 0.46 + (d2 - 0.5) * 0.15 + (d3 - 0.5) * 0.055)
+      const d4 = fbm3(tmp.x * 14.0 + 90, tmp.y * 14.0 + 90, tmp.z * 14.0 + 90)
+      // big lumps + craters + grit + fine roughness = asteroid
+      const r =
+        BR *
+        (1 + (d - 0.5) * 0.46 + (d2 - 0.5) * 0.16 + (d3 - 0.5) * 0.085 + (d4 - 0.5) * 0.042)
       posAttr.setXYZ(i, tmp.x * r, tmp.y * r, tmp.z * r)
     }
     geo.computeVertexNormals()
     const mat = new THREE.MeshPhysicalMaterial({
       color: 0x100f0d,
       metalness: 0.0,
-      roughness: 0.82, // dark rocky asteroid — matte
-      clearcoat: 0.22,
-      clearcoatRoughness: 0.4, // occasional faint mineral glint
+      roughness: 0.92, // dark rocky asteroid — matte
+      clearcoat: 0.1,
+      clearcoatRoughness: 0.55, // occasional faint mineral glint
       iridescence: 0.0,
       envMapIntensity: 0.4, // faint reflections — stays dark
     })
