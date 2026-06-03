@@ -17,6 +17,65 @@ const CONFIG = {
 // Change this one value to taste.
 const HAZE = 0.8
 
+/* ── Quality tiers ───────────────────────────────────────────────────────────
+   The scene is fill-rate bound (full-screen procedural nebula + a heavy displaced
+   sphere), so the cost is dominated by how many pixels × how much per-pixel work
+   we do. Rather than ship one setting that either looks great OR runs everywhere,
+   we pick a starting tier from a cheap device probe and then let a runtime
+   adaptive-DPR controller (see the frame loop) walk the resolution up/down to hit
+   a smooth frame rate on whatever GPU we actually landed on.
+
+   HIGH is intentionally identical to the hand-tuned look (detail 96, 6 nebula
+   octaves, 7000/2100 stars, physical material, MSAA, DPR up to 2). MEDIUM/LOW
+   trade fidelity for headroom on integrated GPUs and phones. The adaptive
+   controller is the real safety net — tiering just sets a sane starting point. */
+const TIERS = {
+  high: {
+    detail: 96, octaves: 6, stars: [7000, 2100],
+    physical: true, antialias: true, dprCap: 2.0, dprFloor: 0.75,
+  },
+  medium: {
+    detail: 64, octaves: 5, stars: [5000, 1500],
+    physical: true, antialias: true, dprCap: 1.5, dprFloor: 0.66,
+  },
+  low: {
+    detail: 40, octaves: 4, stars: [3000, 900],
+    physical: false, antialias: false, dprCap: 1.0, dprFloor: 0.5,
+  },
+}
+
+// One-time, cheap capability probe. Heuristic on purpose — misclassification is
+// fine because the adaptive-DPR loop corrects smoothness at runtime regardless.
+function detectTier() {
+  if (typeof navigator === 'undefined') return 'high'
+  const ua = navigator.userAgent || ''
+  const mobile = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle/i.test(ua)
+  const cores = navigator.hardwareConcurrency || 4
+  const mem = navigator.deviceMemory || 4
+
+  let gpu = ''
+  try {
+    const c = document.createElement('canvas')
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl')
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info')
+      if (ext) gpu = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '').toLowerCase()
+      gl.getExtension('WEBGL_lose_context')?.loseContext()
+    }
+  } catch {
+    /* probe failed — fall back to UA/core heuristics below */
+  }
+
+  const software = /swiftshader|llvmpipe|basic render|software/i.test(gpu)
+  const strong = /(rtx|gtx|geforce|radeon rx|radeon pro|\bnvidia\b|apple m[1-9]|arc a[0-9])/i.test(gpu)
+  const weak = /(intel|hd graphics|uhd graphics|iris|mali|adreno [1-5]\d{2}|powervr|apple a[0-9])/i.test(gpu)
+
+  if (mobile || software || cores <= 4 || mem <= 4) return 'low'
+  if (strong || (cores >= 8 && mem >= 8 && !weak)) return 'high'
+  if (weak) return 'medium'
+  return 'medium' // unknown desktop GPU — start safe, let adaptive scale up
+}
+
 /* ── value-noise helpers used to sculpt the asteroid surface (CPU side) ── */
 function hash3(x, y, z) {
   const n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453
@@ -58,13 +117,23 @@ export default function OrbitScene() {
   useEffect(() => {
     const container = containerRef.current
 
+    const q = TIERS[detectTier()]
+
     // Let three own the <canvas>: a fresh element every mount. (Reusing a ref'd
     // canvas breaks under StrictMode/HMR — cleanup's forceContextLoss() kills
     // it, then the re-mount can't get a new context on the dead canvas.)
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer({
+      antialias: q.antialias,
+      // Steer dual-GPU laptops toward the discrete GPU; skip the unused buffers.
+      powerPreference: 'high-performance',
+      stencil: false,
+      alpha: false,
+    })
     renderer.domElement.className = 'hero-scene'
     container.appendChild(renderer.domElement)
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+    // Start at the tier's DPR cap; the adaptive loop tunes it from here.
+    let curPR = Math.min(devicePixelRatio, q.dprCap)
+    renderer.setPixelRatio(curPR)
     renderer.setSize(innerWidth, innerHeight)
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = CONFIG.exposure
@@ -107,12 +176,14 @@ export default function OrbitScene() {
       uMouse: { value: new THREE.Vector2(0.5, 0.5) },
       uHaze: { value: HAZE },
     }
+    // fbm octave count is the dominant per-pixel cost of this full-screen plane;
+    // inject the tier's count straight into the (constant) loop bound.
     const nebFrag = `
 precision highp float; uniform float uTime; uniform vec2 uRes,uMouse; uniform float uHaze; varying vec2 vUv;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);float a=hash(i),b=hash(i+vec2(1,0)),c=hash(i+vec2(0,1)),d=hash(i+vec2(1,1));
  vec2 u=f*f*(3.-2.*f);return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);}
-float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<6;i++){s+=a*noise(p);p*=2.02;a*=.5;}return s;}
+float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<${q.octaves};i++){s+=a*noise(p);p*=2.02;a*=.5;}return s;}
 void main(){
   vec2 uv=vUv; vec2 p=uv; p.x*=uRes.x/uRes.y;
   vec2 mo=(uMouse-0.5);
@@ -188,8 +259,8 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       starMaterials.push(m)
       return new THREE.Points(g, m)
     }
-    const starsFar = makeStars(7000, 46, -24, -9, 0.3, 0.85) // distant
-    const starsNear = makeStars(2100, 34, -11, -4, 0.5, 1.3) // closer (more parallax)
+    const starsFar = makeStars(q.stars[0], 46, -24, -9, 0.3, 0.85) // distant
+    const starsNear = makeStars(q.stars[1], 34, -11, -4, 0.5, 1.3) // closer (more parallax)
     scene.add(starsFar)
     scene.add(starsNear)
 
@@ -199,7 +270,11 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
     // verts merge purely by position). Indexed geometry lets computeVertexNormals
     // SMOOTH-shade the surface instead of flat-shading every triangle — that kills
     // the blocky low-poly facets and reads as an organic asteroid.
-    let geo = new THREE.IcosahedronGeometry(BR, 96)
+    //
+    // detail scales triangles (20·detail²) AND the one-time CPU displacement loop
+    // below, so it's the single biggest knob on both the mount-time hitch and the
+    // steady-state vertex cost. HIGH keeps the tuned 96; lower tiers drop it.
+    let geo = new THREE.IcosahedronGeometry(BR, q.detail)
     geo.deleteAttribute('uv')
     geo.deleteAttribute('normal')
     geo = mergeVertices(geo)
@@ -218,15 +293,25 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       posAttr.setXYZ(i, tmp.x * r, tmp.y * r, tmp.z * r)
     }
     geo.computeVertexNormals()
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: 0x1a140d, // warm earthy brown-black (was cooler 0x100f0d)
-      metalness: 0.0,
-      roughness: 0.9, // earthy matte body...
-      clearcoat: 0.2, // ...with a soft glossy coat for the light glares (white top/mid + blue rim)
-      clearcoatRoughness: 0.5, // softer, diffuse glints — less metallic
-      iridescence: 0.0,
-      envMapIntensity: 0.38, // ease reflections down — less chrome
-    })
+    // Physical (clearcoat) carries the soft white/blue glints on capable GPUs;
+    // the cheaper Standard material drops the second specular lobe on low tier and
+    // leans on envMap + roughness to approximate the look.
+    const mat = q.physical
+      ? new THREE.MeshPhysicalMaterial({
+          color: 0x1a140d, // warm earthy brown-black (was cooler 0x100f0d)
+          metalness: 0.0,
+          roughness: 0.9, // earthy matte body...
+          clearcoat: 0.2, // ...with a soft glossy coat for the light glares (white top/mid + blue rim)
+          clearcoatRoughness: 0.5, // softer, diffuse glints — less metallic
+          iridescence: 0.0,
+          envMapIntensity: 0.38, // ease reflections down — less chrome
+        })
+      : new THREE.MeshStandardMaterial({
+          color: 0x1a140d,
+          metalness: 0.0,
+          roughness: 0.82,
+          envMapIntensity: 0.5,
+        })
     const orb = new THREE.Mesh(geo, mat)
     const BASE_SCALE = CONFIG.radius / BR
     orb.position.set(...CONFIG.pos)
@@ -256,24 +341,43 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       camera.updateProjectionMatrix()
       renderer.setSize(innerWidth, innerHeight)
       neb.uRes.value.set(innerWidth, innerHeight)
+      requestRender() // repaint the new size if the loop was parked (tab hidden)
     }
-    resize()
-    addEventListener('resize', resize)
 
     const m = { x: 0, y: 0, tx: 0, ty: 0 }
     const onMove = (e) => {
       m.tx = e.clientX / innerWidth - 0.5
       m.ty = e.clientY / innerHeight - 0.5
     }
-    addEventListener('mousemove', onMove)
 
-    const clock = new THREE.Clock()
-    let raf
-    function tick() {
-      const t = clock.getElapsedTime()
-      neb.uTime.value = t
+    /* ── frame loop ───────────────────────────────────────────────────────────
+       requestRender() schedules at most one rAF; the frame re-arms itself, so the
+       loop runs continuously while the tab is visible. visibilitychange parks it
+       when hidden (and the gate stops a double-schedule on resume). */
+    let last = performance.now()
+    let elapsed = 0
+    let fpsEMA = 0
+    let lastAdjust = 0
+    let raf = 0
+    let paused = false
+
+    function requestRender() {
+      if (!raf && !paused) raf = requestAnimationFrame(frame)
+    }
+
+    function frame() {
+      raf = 0
+      // clamp dt so a tab-switch / GC pause doesn't lurch the animation or poison
+      // the FPS estimate.
+      const now = performance.now()
+      const dt = Math.min((now - last) / 1000, 0.05)
+      last = now
+      elapsed += dt
+      const t = elapsed
+
       m.x += (m.tx - m.x) * 0.05
       m.y += (m.ty - m.y) * 0.05
+      neb.uTime.value = t
       neb.uMouse.value.set(0.5 + m.x, 0.5 - m.y) // nebula follows the SMOOTHED cursor, like the rock
       orb.rotation.y = t * 0.04 + m.x * 0.4
       orb.rotation.x = Math.sin(t * 0.15) * 0.05 - m.y * 0.25
@@ -285,14 +389,55 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       camera.position.y = -m.y * CONFIG.camParallax * 0.7
       camera.lookAt(CONFIG.look[0], CONFIG.look[1], CONFIG.look[2])
       renderer.render(scene, camera)
-      raf = requestAnimationFrame(tick)
+
+      // Adaptive DPR: skip frames whose dt was clamped (post-pause spikes), then
+      // EMA the frame rate and nudge the resolution toward a smooth ~55-60fps.
+      if (dt < 0.045) {
+        const fps = 1 / Math.max(dt, 1e-3)
+        fpsEMA = fpsEMA ? fpsEMA * 0.9 + fps * 0.1 : fps
+        if (t - lastAdjust > 1) {
+          const cap = Math.min(devicePixelRatio, q.dprCap)
+          if (fpsEMA < 52 && curPR > q.dprFloor) {
+            curPR = Math.max(q.dprFloor, curPR * 0.85)
+            renderer.setPixelRatio(curPR)
+            lastAdjust = t
+          } else if (fpsEMA > 58 && curPR < cap) {
+            curPR = Math.min(cap, curPR * 1.07)
+            renderer.setPixelRatio(curPR)
+            lastAdjust = t
+          }
+        }
+      }
+      requestRender()
     }
-    tick()
+
+    resize()
+    addEventListener('resize', resize)
+    addEventListener('mousemove', onMove, { passive: true })
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        paused = true
+        if (raf) {
+          cancelAnimationFrame(raf)
+          raf = 0
+        }
+      } else {
+        paused = false
+        last = performance.now() // discard the long hidden gap
+        requestRender()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
+    requestRender()
 
     return () => {
-      cancelAnimationFrame(raf)
+      paused = true
+      if (raf) cancelAnimationFrame(raf)
       removeEventListener('resize', resize)
       removeEventListener('mousemove', onMove)
+      document.removeEventListener('visibilitychange', onVisibility)
       geo.dispose()
       mat.dispose()
       nebPlane.geometry.dispose()
