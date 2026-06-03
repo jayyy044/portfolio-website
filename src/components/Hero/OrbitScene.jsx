@@ -237,23 +237,19 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       orb.scale.setScalar(BASE_SCALE * (1 + Math.sin(t * 0.5) * 0.008))
     }
 
-    /* soft atmospheric haze — a faint fresnel glow that hugs the rock's OWN
-       lumpy silhouette (an inflated copy of the rock geo, not a smooth sphere),
-       so it reads as diffuse haze instead of a hard mismatched outline. */
-    const atmGeo = geo.clone()
+    /* thin atmospheric limb — the prototype's exact rim-glow shader, just a
+       tighter radius (1.035 vs 1.05) so it doesn't extend as far past the rock. */
+    const atmGeo = new THREE.SphereGeometry(BR * 1.035, 64, 64)
     const atmMat = new THREE.ShaderMaterial({
       uniforms: { uColor: { value: new THREE.Color(0x3f6cff) } },
       vertexShader: `varying vec3 vN;varying vec3 vV;void main(){vN=normalize(normalMatrix*normal);vec4 mv=modelViewMatrix*vec4(position,1.);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}`,
-      // smooth fresnel falloff (no hard band cutoff) -> soft glow at the silhouette fading inward
-      fragmentShader: `varying vec3 vN;varying vec3 vV;uniform vec3 uColor;void main(){float rim=1.0-max(dot(normalize(vN),normalize(vV)),0.0);float glow=pow(rim,2.0)*0.26;gl_FragColor=vec4(uColor*glow,1.0);}`,
+      fragmentShader: `varying vec3 vN;varying vec3 vV;uniform vec3 uColor;void main(){float rim=1.0-max(dot(normalize(vN),normalize(vV)),0.0);float band=pow(rim,2.6)*(1.0-smoothstep(0.5,1.0,rim));gl_FragColor=vec4(uColor*band,band*1.25);}`,
       transparent: true,
       blending: THREE.AdditiveBlending,
       side: THREE.FrontSide,
       depthWrite: false,
     })
-    const atm = new THREE.Mesh(atmGeo, atmMat)
-    atm.scale.setScalar(1.035) // sit just outside the rock surface -> thin haze halo
-    orb.add(atm)
+    orb.add(new THREE.Mesh(atmGeo, atmMat))
 
     function resize() {
       camera.aspect = innerWidth / innerHeight
