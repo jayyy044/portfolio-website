@@ -151,7 +151,7 @@ void main(){
     const starVert = `
 attribute float aSize; attribute float aPhase; uniform float uTime; varying float vT;
 void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0);
-  float tw=0.5+0.5*sin(uTime*2.3+aPhase); vT=0.34+0.66*tw*tw;
+  float tw=0.5+0.5*sin(uTime*2.3+aPhase); vT=0.16+0.84*tw*tw;
   gl_PointSize=aSize*(135.0/-mv.z)*(0.7+0.6*vT); gl_Position=projectionMatrix*mv; }`
     const starFrag = `
 precision highp float; varying float vT;
