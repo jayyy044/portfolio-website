@@ -15,7 +15,7 @@ const CONFIG = {
 
 // Nebula haze intensity — fixed. 0 = dark/empty field, 1 = full clouds.
 // Change this one value to taste.
-const HAZE = 0.6
+const HAZE = 0.8
 
 /* ── value-noise helpers used to sculpt the asteroid surface (CPU side) ── */
 function hash3(x, y, z) {
@@ -237,18 +237,23 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       orb.scale.setScalar(BASE_SCALE * (1 + Math.sin(t * 0.5) * 0.008))
     }
 
-    /* thin atmospheric limb — a band that hugs the ball's edge and fades out */
-    const atmGeo = new THREE.SphereGeometry(BR * 1.05, 64, 64)
+    /* soft atmospheric haze — a faint fresnel glow that hugs the rock's OWN
+       lumpy silhouette (an inflated copy of the rock geo, not a smooth sphere),
+       so it reads as diffuse haze instead of a hard mismatched outline. */
+    const atmGeo = geo.clone()
     const atmMat = new THREE.ShaderMaterial({
       uniforms: { uColor: { value: new THREE.Color(0x3f6cff) } },
       vertexShader: `varying vec3 vN;varying vec3 vV;void main(){vN=normalize(normalMatrix*normal);vec4 mv=modelViewMatrix*vec4(position,1.);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}`,
-      fragmentShader: `varying vec3 vN;varying vec3 vV;uniform vec3 uColor;void main(){float rim=1.0-max(dot(normalize(vN),normalize(vV)),0.0);float band=pow(rim,2.6)*(1.0-smoothstep(0.5,1.0,rim));gl_FragColor=vec4(uColor*band,band*1.25);}`,
+      // smooth fresnel falloff (no hard band cutoff) -> soft glow at the silhouette fading inward
+      fragmentShader: `varying vec3 vN;varying vec3 vV;uniform vec3 uColor;void main(){float rim=1.0-max(dot(normalize(vN),normalize(vV)),0.0);float glow=pow(rim,2.0)*0.26;gl_FragColor=vec4(uColor*glow,1.0);}`,
       transparent: true,
       blending: THREE.AdditiveBlending,
       side: THREE.FrontSide,
       depthWrite: false,
     })
-    orb.add(new THREE.Mesh(atmGeo, atmMat))
+    const atm = new THREE.Mesh(atmGeo, atmMat)
+    atm.scale.setScalar(1.035) // sit just outside the rock surface -> thin haze halo
+    orb.add(atm)
 
     function resize() {
       camera.aspect = innerWidth / innerHeight
