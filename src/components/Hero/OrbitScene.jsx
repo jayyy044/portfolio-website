@@ -13,7 +13,7 @@ const CONFIG = {
 }
 
 // Nebula intensity at scroll-top (dark, minimal haze) → 1.0 once scrolled in.
-const HAZE_MIN = 0.4
+const HAZE_MIN = 0.6
 // Haze reaches full over this fraction of a viewport of scroll.
 const HAZE_SCROLL_SPAN = 0.7
 
