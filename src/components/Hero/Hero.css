@@ -136,40 +136,6 @@
   opacity: 0.7;
 }
 
-/* corner readouts — instrument feel */
-.hero .read {
-  position: absolute;
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
-  color: var(--hero-dim);
-  line-height: 1.9;
-}
-.hero .read b {
-  color: var(--hero-text);
-  font-weight: 400;
-}
-.hero .read.tl {
-  top: 84px;
-  left: 34px;
-}
-.hero .read.tr {
-  top: 84px;
-  right: 34px;
-  text-align: right;
-}
-.hero .read.bl {
-  bottom: 30px;
-  left: 34px;
-}
-.hero .read.br {
-  bottom: 30px;
-  right: 34px;
-  text-align: right;
-}
-.hero .read .acc {
-  color: var(--hero-ice);
-}
-
 /* center reticle */
 .hero .reticle {
   position: fixed;
@@ -204,9 +170,7 @@
 }
 
 @media (max-width: 760px) {
-  .hero-nav ul,
-  .hero .read.tr,
-  .hero .read.br {
+  .hero-nav ul {
     display: none;
   }
 }
