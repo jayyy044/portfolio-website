@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
+import './OrbitScene.css'
 
 /* Composition for this variant — the asteroid sits low, viewed from orbit. */
 const CONFIG = {
@@ -31,15 +32,15 @@ const HAZE = 0.8
    controller is the real safety net — tiering just sets a sane starting point. */
 const TIERS = {
   high: {
-    detail: 96, octaves: 6, stars: [7000, 2100],
+    detail: 128, octaves: 6, stars: [7000, 2100],
     physical: true, antialias: true, dprCap: 2.0, dprFloor: 0.75,
   },
   medium: {
-    detail: 64, octaves: 5, stars: [5000, 1500],
+    detail: 104, octaves: 5, stars: [5000, 1500],
     physical: true, antialias: true, dprCap: 1.5, dprFloor: 0.66,
   },
   low: {
-    detail: 40, octaves: 4, stars: [3000, 900],
+    detail: 48, octaves: 4, stars: [3000, 900],
     physical: false, antialias: false, dprCap: 1.0, dprFloor: 0.5,
   },
 }
@@ -130,6 +131,13 @@ export default function OrbitScene() {
       alpha: false,
     })
     renderer.domElement.className = 'hero-scene'
+    // Hide the canvas until the first frame actually renders. The geometry build +
+    // shader/IBL compile block the main thread for a beat, during which an unpainted
+    // canvas shows black; revealing only after the first render hides that gap behind
+    // the page's matching dark background (no black flash, just a soft fade-in). This
+    // also covers React StrictMode's dev-only mount→unmount→mount double build.
+    renderer.domElement.style.opacity = '0'
+    renderer.domElement.style.transition = 'opacity 0.5s ease'
     container.appendChild(renderer.domElement)
     // Start at the tier's DPR cap; the adaptive loop tunes it from here.
     let curPR = Math.min(devicePixelRatio, q.dprCap)
@@ -157,16 +165,20 @@ export default function OrbitScene() {
     const rim = new THREE.PointLight(0x6f86ff, 9, 40)
     rim.position.set(-5, -1, -3)
     scene.add(rim)
+    // mirror of the blue rim on the right-rear so BOTH silhouette edges catch the glow
+    const rim2 = new THREE.PointLight(0x6f86ff, 9, 40)
+    rim2.position.set(5, -1, -3)
+    scene.add(rim2)
     const warm = new THREE.PointLight(0xe8945b, 5, 40)
     warm.position.set(5, 3, 2)
     scene.add(warm)
-    // white sun on the FRONT of the rock
-    const front = new THREE.DirectionalLight(0xffffff, 2.5)
+    // white sun on the FRONT of the rock (prototype intensity/position)
+    const front = new THREE.DirectionalLight(0xffffff, 2.1)
     front.position.set(1.2, 2.2, 8)
     scene.add(front)
-    // rakes the TOP ridge so it isn't a dark band — brighter + more over the crest
-    const top = new THREE.DirectionalLight(0xe6eeff, 2.9)
-    top.position.set(-0.4, 8, 5.5)
+    // rakes the TOP ridge so it isn't a dark band (prototype intensity/position)
+    const top = new THREE.DirectionalLight(0xe6eeff, 1.8)
+    top.position.set(-0.6, 7, 4.5)
     scene.add(top)
 
     /* ===== cursor-reactive nebula (deep space, warm + cool, drifting) ===== */
@@ -266,48 +278,46 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
 
     /* ===== the dark rocky asteroid (organic carved sphere) ===== */
     const BR = 1.35
-    // Weld the icosahedron into an indexed mesh (drop per-face uv/normal first so
-    // verts merge purely by position). Indexed geometry lets computeVertexNormals
-    // SMOOTH-shade the surface instead of flat-shading every triangle — that kills
-    // the blocky low-poly facets and reads as an organic asteroid.
+    // Weld to an indexed mesh so the displacement loop runs ONCE per unique vertex
+    // (cheap), displace, then toNonIndexed() so computeVertexNormals FLAT-shades
+    // each triangle. The crisp per-facet shading is what reads as chiseled mineral
+    // rock — averaging the normals (smooth shading) is what made it look slick.
     //
-    // detail scales triangles (20·detail²) AND the one-time CPU displacement loop
-    // below, so it's the single biggest knob on both the mount-time hitch and the
-    // steady-state vertex cost. HIGH keeps the tuned 96; lower tiers drop it.
+    // detail scales triangles (20·detail²) and the mount-time displacement loop; it's
+    // the biggest perf knob. HIGH matches the prototype's 128; lower tiers drop it.
     let geo = new THREE.IcosahedronGeometry(BR, q.detail)
     geo.deleteAttribute('uv')
     geo.deleteAttribute('normal')
     geo = mergeVertices(geo)
     const posAttr = geo.attributes.position
     const tmp = new THREE.Vector3()
+    let maxR = 0 // tallest peak — sizes the atmosphere shell so the rock can't pierce it
     for (let i = 0; i < posAttr.count; i++) {
       tmp.fromBufferAttribute(posAttr, i).normalize()
       const d = fbm3(tmp.x * 1.1 + 5, tmp.y * 1.1 + 5, tmp.z * 1.1 + 5)
       const d2 = fbm3(tmp.x * 3.4 + 20, tmp.y * 3.4 + 20, tmp.z * 3.4 + 20)
       const d3 = fbm3(tmp.x * 7.5 + 50, tmp.y * 7.5 + 50, tmp.z * 7.5 + 50)
-      const d4 = fbm3(tmp.x * 14.0 + 90, tmp.y * 14.0 + 90, tmp.z * 14.0 + 90)
-      // big lumps + craters + grit + fine roughness = asteroid
-      const r =
-        BR *
-        (1 + (d - 0.5) * 0.46 + (d2 - 0.5) * 0.16 + (d3 - 0.5) * 0.085 + (d4 - 0.5) * 0.042)
+      // big lumps + craters + grit — the prototype's exact 3-octave displacement
+      const r = BR * (1 + (d - 0.5) * 0.46 + (d2 - 0.5) * 0.15 + (d3 - 0.5) * 0.055)
+      if (r > maxR) maxR = r
       posAttr.setXYZ(i, tmp.x * r, tmp.y * r, tmp.z * r)
     }
+    geo = geo.toNonIndexed() // expand so each triangle owns its verts -> flat facets
     geo.computeVertexNormals()
-    // Physical (clearcoat) carries the soft white/blue glints on capable GPUs;
-    // the cheaper Standard material drops the second specular lobe on low tier and
-    // leans on envMap + roughness to approximate the look.
+    // Prototype material — dark matte rock with a faint mineral clearcoat glint.
+    // Physical carries the clearcoat lobe; LOW tier drops to Standard to save it.
     const mat = q.physical
       ? new THREE.MeshPhysicalMaterial({
-          color: 0x1a140d, // warm earthy brown-black (was cooler 0x100f0d)
+          color: 0x100f0d,
           metalness: 0.0,
-          roughness: 0.9, // earthy matte body...
-          clearcoat: 0.2, // ...with a soft glossy coat for the light glares (white top/mid + blue rim)
-          clearcoatRoughness: 0.5, // softer, diffuse glints — less metallic
+          roughness: 0.82,
+          clearcoat: 0.22,
+          clearcoatRoughness: 0.4,
           iridescence: 0.0,
-          envMapIntensity: 0.38, // ease reflections down — less chrome
+          envMapIntensity: 0.4,
         })
       : new THREE.MeshStandardMaterial({
-          color: 0x1a140d,
+          color: 0x100f0d,
           metalness: 0.0,
           roughness: 0.82,
           envMapIntensity: 0.5,
@@ -322,9 +332,12 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       orb.scale.setScalar(BASE_SCALE * (1 + Math.sin(t * 0.5) * 0.008))
     }
 
-    /* thin atmospheric limb — the prototype's exact rim-glow shader, just a
-       tighter radius (1.035 vs 1.05) so it doesn't extend as far past the rock. */
-    const atmGeo = new THREE.SphereGeometry(BR * 1.035, 64, 64)
+    /* thin atmospheric limb — the prototype's rim-glow shader. The shell is a
+       SMOOTH sphere; if it's smaller than the rock's peaks they poke through and
+       chop the fresnel ring into broken arcs (the "blue film breaking" artifact).
+       Size it just past the tallest peak so the rock can never pierce it — keeps
+       the limb clean while still hugging the silhouette. */
+    const atmGeo = new THREE.SphereGeometry(maxR * 1.02, 64, 64)
     const atmMat = new THREE.ShaderMaterial({
       uniforms: { uColor: { value: new THREE.Color(0x3f6cff) } },
       vertexShader: `varying vec3 vN;varying vec3 vV;void main(){vN=normalize(normalMatrix*normal);vec4 mv=modelViewMatrix*vec4(position,1.);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}`,
@@ -360,6 +373,7 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
     let lastAdjust = 0
     let raf = 0
     let paused = false
+    let revealed = false
 
     function requestRender() {
       if (!raf && !paused) raf = requestAnimationFrame(frame)
@@ -389,6 +403,10 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       camera.position.y = -m.y * CONFIG.camParallax * 0.7
       camera.lookAt(CONFIG.look[0], CONFIG.look[1], CONFIG.look[2])
       renderer.render(scene, camera)
+      if (!revealed) {
+        revealed = true
+        renderer.domElement.style.opacity = '1' // fade in once we have real pixels
+      }
 
       // Adaptive DPR: skip frames whose dt was clamped (post-pause spikes), then
       // EMA the frame rate and nudge the resolution toward a smooth ~55-60fps.

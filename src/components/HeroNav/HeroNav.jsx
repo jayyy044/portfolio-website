@@ -1,3 +1,5 @@
+import './HeroNav.css'
+
 export default function HeroNav() {
   return (
     <nav className="hero-nav">

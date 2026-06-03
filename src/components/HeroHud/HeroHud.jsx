@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import './HeroHud.css'
 
 export default function HeroHud() {
   const hudRef = useRef(null)

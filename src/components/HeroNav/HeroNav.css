@@ -1,0 +1,46 @@
+/* ── hero top nav ── */
+.hero-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 26px 34px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.hero-nav .brand {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  color: var(--hero-text);
+}
+.hero-nav .brand i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--hero-ice);
+  box-shadow: 0 0 10px var(--hero-ice);
+  font-style: normal;
+}
+.hero-nav ul {
+  display: flex;
+  gap: 24px;
+  list-style: none;
+}
+.hero-nav a {
+  color: var(--hero-dim);
+}
+.hero-nav a:hover {
+  color: var(--hero-text);
+}
+
+@media (max-width: 760px) {
+  .hero-nav ul {
+    display: none;
+  }
+}

@@ -1,6 +1,9 @@
 /* ── Orbital hero — self-contained replica of the atelier/orbit prototype.
    Palette + scrollless full-viewport layout are scoped under .hero so they
-   don't disturb the rest of the app's global styles. ── */
+   don't disturb the rest of the app's global styles. Component-specific styles
+   live next to their components (OrbitScene / HeroNav / HeroHud); this file holds
+   the shared shell (palette vars, base type) and the bits Hero renders directly
+   (grain, reticle). ── */
 .hero {
   --hero-bg: #04050a;
   --hero-text: #e9e7e2;
@@ -30,16 +33,6 @@
   font-family: 'Cormorant Garamond', serif;
 }
 
-/* the WebGL canvas fills the viewport behind everything */
-.hero-scene {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
 /* film grain overlay */
 .hero .grain {
   position: fixed;
@@ -49,91 +42,6 @@
   opacity: 0.05;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
-}
-
-/* ── nav ── */
-.hero-nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 26px 34px;
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-.hero-nav .brand {
-  display: flex;
-  gap: 11px;
-  align-items: center;
-  color: var(--hero-text);
-}
-.hero-nav .brand i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--hero-ice);
-  box-shadow: 0 0 10px var(--hero-ice);
-  font-style: normal;
-}
-.hero-nav ul {
-  display: flex;
-  gap: 24px;
-  list-style: none;
-}
-.hero-nav a {
-  color: var(--hero-dim);
-}
-.hero-nav a:hover {
-  color: var(--hero-text);
-}
-
-/* ── HUD over the planet ── */
-.hero .hud {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  pointer-events: none;
-}
-.hero .title {
-  position: absolute;
-  top: 23vh;
-  left: 0;
-  right: 0;
-  text-align: center;
-}
-.hero .title .k {
-  font-size: 11px;
-  letter-spacing: 0.42em;
-  text-transform: uppercase;
-  color: var(--hero-ice);
-  margin-bottom: 18px;
-}
-.hero .title h1 {
-  font-family: 'Geist Mono', monospace;
-  font-weight: 500;
-  font-size: clamp(32px, 6.2vw, 90px);
-  line-height: 1.02;
-  letter-spacing: -0.02em;
-  text-shadow: 0 6px 60px rgba(0, 0, 0, 0.7);
-}
-.hero .title h1 em {
-  font-style: normal;
-  font-weight: 400;
-  color: var(--hero-ice);
-}
-.hero .title .cap {
-  margin-top: 22px;
-  font-family: 'Geist Mono', monospace;
-  font-style: normal;
-  font-size: clamp(12px, 1.3vw, 15px);
-  letter-spacing: 0.04em;
-  color: var(--hero-text);
-  opacity: 0.7;
 }
 
 /* center reticle */
@@ -167,10 +75,4 @@
   height: 1px;
   width: 100%;
   transform: translateY(-50%);
-}
-
-@media (max-width: 760px) {
-  .hero-nav ul {
-    display: none;
-  }
 }

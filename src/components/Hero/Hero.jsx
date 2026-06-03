@@ -1,7 +1,7 @@
-import OrbitScene from './OrbitScene'
-import HeroNav from './HeroNav'
-import HeroHud from './HeroHud'
 import './Hero.css'
+import OrbitScene from '../OrbitScene/OrbitScene'
+import HeroNav from '../HeroNav/HeroNav'
+import HeroHud from '../HeroHud/HeroHud'
 
 export default function Hero() {
   return (

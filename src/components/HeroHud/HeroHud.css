@@ -1,0 +1,43 @@
+/* ── HUD over the planet ── */
+.hero .hud {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+.hero .title {
+  position: absolute;
+  top: 23vh;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+.hero .title .k {
+  font-size: 11px;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--hero-ice);
+  margin-bottom: 18px;
+}
+.hero .title h1 {
+  font-family: 'Geist Mono', monospace;
+  font-weight: 500;
+  font-size: clamp(32px, 6.2vw, 90px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  text-shadow: 0 6px 60px rgba(0, 0, 0, 0.7);
+}
+.hero .title h1 em {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--hero-ice);
+}
+.hero .title .cap {
+  margin-top: 22px;
+  font-family: 'Geist Mono', monospace;
+  font-style: normal;
+  font-size: clamp(12px, 1.3vw, 15px);
+  letter-spacing: 0.04em;
+  color: var(--hero-text);
+  opacity: 0.7;
+}
