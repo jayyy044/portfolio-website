@@ -220,13 +220,13 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
     }
     geo.computeVertexNormals()
     const mat = new THREE.MeshPhysicalMaterial({
-      color: 0x100f0d,
+      color: 0x1a140d, // warm earthy brown-black (was cooler 0x100f0d)
       metalness: 0.0,
-      roughness: 0.85, // dark rocky asteroid — matte body...
-      clearcoat: 0.28, // ...with a glossy coat for the light glares (white top/mid + blue rim)
-      clearcoatRoughness: 0.38, // sharper glints
+      roughness: 0.9, // earthy matte body...
+      clearcoat: 0.2, // ...with a soft glossy coat for the light glares (white top/mid + blue rim)
+      clearcoatRoughness: 0.5, // softer, diffuse glints — less metallic
       iridescence: 0.0,
-      envMapIntensity: 0.5, // faint reflections — stays dark
+      envMapIntensity: 0.38, // ease reflections down — less chrome
     })
     const orb = new THREE.Mesh(geo, mat)
     const BASE_SCALE = CONFIG.radius / BR
