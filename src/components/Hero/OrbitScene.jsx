@@ -13,10 +13,9 @@ const CONFIG = {
   camParallax: 0.3,
 }
 
-// Nebula intensity at scroll-top (dark, minimal haze) → 1.0 once scrolled in.
-const HAZE_MIN = 0.6
-// Haze reaches full over this fraction of a viewport of scroll.
-const HAZE_SCROLL_SPAN = 0.7
+// Nebula haze intensity — fixed. 0 = dark/empty field, 1 = full clouds.
+// Change this one value to taste.
+const HAZE = 0.6
 
 /* ── value-noise helpers used to sculpt the asteroid surface (CPU side) ── */
 function hash3(x, y, z) {
@@ -80,7 +79,7 @@ export default function OrbitScene() {
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.03).texture
     // 0.184's RoomEnvironment is brighter than 0.160's; dial the IBL back down
     // so the matte rock reads dark again (matches the prototype look).
-    scene.environmentIntensity = 0.25
+    scene.environmentIntensity = 0.34
 
     scene.add(new THREE.AmbientLight(0x1b2336, 1.35))
     const key = new THREE.DirectionalLight(0xcdd6ff, 1.1)
@@ -93,7 +92,7 @@ export default function OrbitScene() {
     warm.position.set(5, 3, 2)
     scene.add(warm)
     // white sun on the FRONT of the rock
-    const front = new THREE.DirectionalLight(0xffffff, 2.1)
+    const front = new THREE.DirectionalLight(0xffffff, 2.5)
     front.position.set(1.2, 2.2, 8)
     scene.add(front)
     // rakes the TOP ridge so it isn't a dark band — brighter + more over the crest
@@ -106,7 +105,7 @@ export default function OrbitScene() {
       uTime: { value: 0 },
       uRes: { value: new THREE.Vector2() },
       uMouse: { value: new THREE.Vector2(0.5, 0.5) },
-      uHaze: { value: HAZE_MIN },
+      uHaze: { value: HAZE },
     }
     const nebFrag = `
 precision highp float; uniform float uTime; uniform vec2 uRes,uMouse; uniform float uHaze; varying vec2 vUv;
@@ -267,15 +266,6 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
     }
     addEventListener('mousemove', onMove)
 
-    // scroll-driven haze: dark/minimal at the top, blooms in as you scroll down
-    const hz = { cur: HAZE_MIN, target: HAZE_MIN }
-    const onScroll = () => {
-      const p = Math.min(scrollY / (innerHeight * HAZE_SCROLL_SPAN), 1)
-      hz.target = HAZE_MIN + (1 - HAZE_MIN) * p
-    }
-    addEventListener('scroll', onScroll, { passive: true })
-    onScroll()
-
     const clock = new THREE.Clock()
     let raf
     function tick() {
@@ -284,8 +274,6 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       m.x += (m.tx - m.x) * 0.05
       m.y += (m.ty - m.y) * 0.05
       neb.uMouse.value.set(0.5 + m.x, 0.5 - m.y) // nebula follows the SMOOTHED cursor, like the rock
-      hz.cur += (hz.target - hz.cur) * 0.08 // ease the haze toward its scroll target
-      neb.uHaze.value = hz.cur
       orb.rotation.y = t * 0.04 + m.x * 0.4
       orb.rotation.x = Math.sin(t * 0.15) * 0.05 - m.y * 0.25
       breathe(t)
@@ -304,7 +292,6 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       cancelAnimationFrame(raf)
       removeEventListener('resize', resize)
       removeEventListener('mousemove', onMove)
-      removeEventListener('scroll', onScroll)
       geo.dispose()
       mat.dispose()
       nebPlane.geometry.dispose()

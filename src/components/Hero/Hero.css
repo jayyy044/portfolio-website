@@ -18,13 +18,6 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* invisible scroll runway behind the pinned hero — its height is the scroll
-   distance over which the nebula haze blooms in */
-.hero-scroll-space {
-  height: 180vh;
-  pointer-events: none;
-}
-
 .hero ::selection {
   background: var(--hero-ice);
   color: var(--hero-bg);
