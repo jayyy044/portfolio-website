@@ -151,7 +151,7 @@ void main(){
     const starVert = `
 attribute float aSize; attribute float aPhase; uniform float uTime; varying float vT;
 void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0);
-  float tw=0.5+0.5*sin(uTime*5.0+aPhase); vT=0.16+0.84*tw*tw;
+  float tw=0.5+0.5*sin(uTime*2.3+aPhase); vT=0.16+0.84*tw*tw;
   gl_PointSize=aSize*(135.0/-mv.z)*(0.7+0.6*vT); gl_Position=projectionMatrix*mv; }`
     const starFrag = `
 precision highp float; varying float vT;
@@ -160,7 +160,7 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
   float fx=smoothstep(0.5,0.0,abs(uv.x))*smoothstep(0.08,0.0,abs(uv.y));
   float fy=smoothstep(0.5,0.0,abs(uv.y))*smoothstep(0.08,0.0,abs(uv.x));
   float a=(core*0.9+max(fx,fy)*0.6)*vT; if(a<0.01) discard;
-  gl_FragColor=vec4(vec3(0.92,0.95,1.0)*1.3,a); }`
+  gl_FragColor=vec4(vec3(0.92,0.95,1.0),a); }`
     const starMaterials = []
     function makeStars(count, spreadXY, zMin, zMax, sizeMin, sizeMax) {
       const g = new THREE.BufferGeometry()
@@ -188,8 +188,8 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
       starMaterials.push(m)
       return new THREE.Points(g, m)
     }
-    const starsFar = makeStars(9000, 46, -24, -9, 0.3, 0.85) // distant
-    const starsNear = makeStars(2600, 34, -11, -4, 0.5, 1.3) // closer (more parallax)
+    const starsFar = makeStars(7000, 46, -24, -9, 0.3, 0.85) // distant
+    const starsNear = makeStars(2100, 34, -11, -4, 0.5, 1.3) // closer (more parallax)
     scene.add(starsFar)
     scene.add(starsNear)
 
