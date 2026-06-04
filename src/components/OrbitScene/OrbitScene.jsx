@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
 import './OrbitScene.css'
 
 /* Composition for this variant — the asteroid sits low, viewed from orbit. */
@@ -78,9 +77,14 @@ function detectTier() {
 }
 
 /* ── value-noise helpers used to sculpt the asteroid surface (CPU side) ── */
+// Fast integer hash -> [0,1). Replaces Math.sin-based hashing so the heavy CPU
+// displacement build (lots of Worley/fbm per vertex) doesn't block the main thread
+// for seconds on mount — that stall is what made the first load jitter/flash dark.
 function hash3(x, y, z) {
-  const n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453
-  return n - Math.floor(n)
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(z | 0, 1274126177)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  h ^= h >>> 16
+  return (h >>> 0) / 4294967296
 }
 function vnoise(x, y, z) {
   const xi = Math.floor(x)
@@ -92,13 +96,22 @@ function vnoise(x, y, z) {
   const u = xf * xf * (3 - 2 * xf)
   const v = yf * yf * (3 - 2 * yf)
   const w = zf * zf * (3 - 2 * zf)
-  const L = (a, b, t) => a + (b - a) * t
-  const c = (X, Y, Z) => hash3(xi + X, yi + Y, zi + Z)
-  return L(
-    L(L(c(0, 0, 0), c(1, 0, 0), u), L(c(0, 1, 0), c(1, 1, 0), u), v),
-    L(L(c(0, 0, 1), c(1, 0, 1), u), L(c(0, 1, 1), c(1, 1, 1), u), v),
-    w
-  )
+  // inlined lerps (no per-call closures -> no GC churn during the build)
+  const c000 = hash3(xi, yi, zi)
+  const c100 = hash3(xi + 1, yi, zi)
+  const c010 = hash3(xi, yi + 1, zi)
+  const c110 = hash3(xi + 1, yi + 1, zi)
+  const c001 = hash3(xi, yi, zi + 1)
+  const c101 = hash3(xi + 1, yi, zi + 1)
+  const c011 = hash3(xi, yi + 1, zi + 1)
+  const c111 = hash3(xi + 1, yi + 1, zi + 1)
+  const x00 = c000 + (c100 - c000) * u
+  const x10 = c010 + (c110 - c010) * u
+  const x01 = c001 + (c101 - c001) * u
+  const x11 = c011 + (c111 - c011) * u
+  const y0 = x00 + (x10 - x00) * v
+  const y1 = x01 + (x11 - x01) * v
+  return y0 + (y1 - y0) * w
 }
 function fbm3(x, y, z) {
   let s = 0
@@ -111,6 +124,91 @@ function fbm3(x, y, z) {
   }
   return s
 }
+
+/* ── 3D cellular (Worley) noise — F1 distance to the nearest feature point.
+   Drives the densely-packed crater field that gives Hyperion its sponge look:
+   the cell centres become crater floors, the cell walls become shared rims. ── */
+function worley3(x, y, z) {
+  const xi = Math.floor(x)
+  const yi = Math.floor(y)
+  const zi = Math.floor(z)
+  const fx = x - xi
+  const fy = y - yi
+  const fz = z - zi
+  let f1 = 9
+  for (let k = -1; k <= 1; k++) {
+    for (let j = -1; j <= 1; j++) {
+      for (let i = -1; i <= 1; i++) {
+        const cx = xi + i
+        const cy = yi + j
+        const cz = zi + k
+        // feature-point offset, inlined (no array alloc -> no GC churn in the build)
+        const dx = i + hash3(cx, cy, cz) - fx
+        const dy = j + hash3(cx + 113, cy + 271, cz + 59) - fy
+        const dz = k + hash3(cx + 977, cy + 433, cz + 757) - fz
+        const d = dx * dx + dy * dy + dz * dz
+        if (d < f1) f1 = d
+      }
+    }
+  }
+  return Math.sqrt(f1)
+}
+// Turn a Worley F1 distance into a crater height profile: a flattish bowl that
+// fills most of the cell, ringed by a sharp raised rim. Returns ~[-1, +0.45].
+function craterShape(w) {
+  // broad flat dark floor (stays low until w≈0.12) then a smooth rise to a soft rim,
+  // so massive craters get a wide deep bottom rather than a single low point
+  const t = Math.min(Math.max((w - 0.12) / 0.3, 0), 1)
+  const ss = t * t * (3 - 2 * t)
+  const floor = -(1 - ss)
+  const rim = Math.exp(-Math.pow((w - 0.46) / 0.13, 2)) * 0.26 // soft, weathered rim
+  return floor + rim
+}
+// rounded bump near a Worley cell centre — fine popcorn-ceiling / stucco stipple
+function blobBump(w) {
+  const t = Math.min(w / 0.4, 1)
+  return (1 - t) * (1 - t)
+}
+
+// Weld a non-indexed geometry into an indexed one. Same job as addons'
+// mergeVertices, but keys vertices by a packed numeric grid hash instead of a
+// string — ~6x faster, which is what kept the mount-time build from stalling.
+function fastIndex(geo) {
+  const src = geo.attributes.position.array
+  const n = geo.attributes.position.count
+  const map = new Map()
+  const index = new Uint32Array(n)
+  const positions = new Float32Array(n * 3) // upper bound; sliced to the unique count
+  let m = 0
+  const Q = 1e4 // grid resolution (0.1mm at this scale) — merges duplicate corners only
+  const B = 32768
+  const OFF = 16384
+  for (let i = 0; i < n; i++) {
+    const x = src[i * 3]
+    const y = src[i * 3 + 1]
+    const z = src[i * 3 + 2]
+    const key =
+      ((Math.round(x * Q) + OFF) * B + (Math.round(y * Q) + OFF)) * B + (Math.round(z * Q) + OFF)
+    let idx = map.get(key)
+    if (idx === undefined) {
+      idx = m
+      positions[m * 3] = x
+      positions[m * 3 + 1] = y
+      positions[m * 3 + 2] = z
+      m++
+      map.set(key, idx)
+    }
+    index[i] = idx
+  }
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.BufferAttribute(positions.subarray(0, m * 3), 3))
+  out.setIndex(new THREE.BufferAttribute(index, 1))
+  return out
+}
+
+// Cache the heavy rock build (its typed arrays) per detail level so StrictMode's
+// double-mount and any remount reuse it instead of recomputing the whole thing.
+const rockCache = new Map()
 
 export default function OrbitScene() {
   const containerRef = useRef(null)
@@ -158,26 +256,28 @@ export default function OrbitScene() {
     // so the matte rock reads dark again (matches the prototype look).
     scene.environmentIntensity = 0.3
 
-    scene.add(new THREE.AmbientLight(0x1b2336, 1.35))
-    const key = new THREE.DirectionalLight(0xcdd6ff, 1.1)
+    scene.add(new THREE.AmbientLight(0x1b2336, 1.1))
+    const key = new THREE.DirectionalLight(0xcdd6ff, 0.75)
     key.position.set(3, 4, 5)
     scene.add(key)
-    const rim = new THREE.PointLight(0x6f86ff, 9, 40)
+    // dialled down from 9/9/5 — a pale cratered moon overexposes under the original
+    // intensities (which were tuned for a near-black rock). The blue *limb* glow is
+    // the atmosphere shader, not these, so it survives the cut.
+    const rim = new THREE.PointLight(0x6f86ff, 3, 40)
     rim.position.set(-5, -1, -3)
     scene.add(rim)
-    // mirror of the blue rim on the right-rear so BOTH silhouette edges catch the glow
-    const rim2 = new THREE.PointLight(0x6f86ff, 9, 40)
+    const rim2 = new THREE.PointLight(0x6f86ff, 3, 40)
     rim2.position.set(5, -1, -3)
     scene.add(rim2)
-    const warm = new THREE.PointLight(0xe8945b, 5, 40)
+    const warm = new THREE.PointLight(0xe8945b, 2, 40)
     warm.position.set(5, 3, 2)
     scene.add(warm)
-    // white sun on the FRONT of the rock (prototype intensity/position)
-    const front = new THREE.DirectionalLight(0xffffff, 2.1)
+    // white sun on the FRONT of the rock (dimmed for the pale moon)
+    const front = new THREE.DirectionalLight(0xffffff, 1.4)
     front.position.set(1.2, 2.2, 8)
     scene.add(front)
-    // rakes the TOP ridge so it isn't a dark band (prototype intensity/position)
-    const top = new THREE.DirectionalLight(0xe6eeff, 1.8)
+    // rakes the TOP ridge so it isn't a dark band (dimmed for the pale moon)
+    const top = new THREE.DirectionalLight(0xe6eeff, 1.15)
     top.position.set(-0.6, 7, 4.5)
     scene.add(top)
 
@@ -276,52 +376,90 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
     scene.add(starsFar)
     scene.add(starsNear)
 
-    /* ===== the dark rocky asteroid (organic carved sphere) ===== */
+    /* ===== Hyperion — pale, densely-cratered "sponge" moon =====
+       Worley (cellular) noise carves a field of overlapping craters at three
+       scales (cell centres = floors, shared walls = rims); a gentle fbm gives the
+       body its irregular battered shape. Per-vertex colours darken the crater
+       floors and lighten the rims — that high-contrast pitting is what reads as
+       Hyperion. Smooth-shaded (its surface is smooth, not faceted). */
     const BR = 1.35
-    // Weld to an indexed mesh so the displacement loop runs ONCE per unique vertex
-    // (cheap), displace, then toNonIndexed() so computeVertexNormals FLAT-shades
-    // each triangle. The crisp per-facet shading is what reads as chiseled mineral
-    // rock — averaging the normals (smooth shading) is what made it look slick.
-    //
-    // detail scales triangles (20·detail²) and the mount-time displacement loop; it's
-    // the biggest perf knob. HIGH matches the prototype's 128; lower tiers drop it.
-    let geo = new THREE.IcosahedronGeometry(BR, q.detail)
-    geo.deleteAttribute('uv')
-    geo.deleteAttribute('normal')
-    geo = mergeVertices(geo)
-    const posAttr = geo.attributes.position
-    const tmp = new THREE.Vector3()
-    let maxR = 0 // tallest peak — sizes the atmosphere shell so the rock can't pierce it
-    for (let i = 0; i < posAttr.count; i++) {
-      tmp.fromBufferAttribute(posAttr, i).normalize()
-      const d = fbm3(tmp.x * 1.1 + 5, tmp.y * 1.1 + 5, tmp.z * 1.1 + 5)
-      const d2 = fbm3(tmp.x * 3.4 + 20, tmp.y * 3.4 + 20, tmp.z * 3.4 + 20)
-      const d3 = fbm3(tmp.x * 7.5 + 50, tmp.y * 7.5 + 50, tmp.z * 7.5 + 50)
-      // big lumps + craters + grit — the prototype's exact 3-octave displacement
-      const r = BR * (1 + (d - 0.5) * 0.46 + (d2 - 0.5) * 0.15 + (d3 - 0.5) * 0.055)
-      if (r > maxR) maxR = r
-      posAttr.setXYZ(i, tmp.x * r, tmp.y * r, tmp.z * r)
+    // The displacement build (Worley/fbm over ~110k verts + normals) costs a few
+    // hundred ms and blocks the main thread, so cache its arrays per detail level —
+    // StrictMode's second mount and any remount reuse them instead of recomputing.
+    let geo
+    let maxR
+    const cached = rockCache.get(q.detail)
+    if (cached) {
+      geo = new THREE.BufferGeometry()
+      geo.setIndex(new THREE.BufferAttribute(cached.index, 1))
+      geo.setAttribute('position', new THREE.BufferAttribute(cached.position, 3))
+      geo.setAttribute('normal', new THREE.BufferAttribute(cached.normal, 3))
+      geo.setAttribute('color', new THREE.BufferAttribute(cached.color, 3))
+      maxR = cached.maxR
+    } else {
+      geo = new THREE.IcosahedronGeometry(BR, q.detail)
+      geo.deleteAttribute('uv')
+      geo.deleteAttribute('normal')
+      geo = fastIndex(geo)
+      const posAttr = geo.attributes.position
+      const colAttr = new Float32Array(posAttr.count * 3)
+      const tmp = new THREE.Vector3()
+      maxR = 0 // tallest peak — sizes the atmosphere shell so the rock can't pierce it
+      const floorCol = [0.002, 0.002, 0.003] // near-pure-black material in crater floors
+      const paleCol = [0.11, 0.11, 0.108] // dark neutral grey high ground
+      for (let i = 0; i < posAttr.count; i++) {
+        tmp.fromBufferAttribute(posAttr, i).normalize()
+        const x = tmp.x
+        const y = tmp.y
+        const z = tmp.z
+        // irregular overall body — gentle, a weathered rounded asteroid
+        const shape = (fbm3(x * 1.0 + 5, y * 1.0 + 5, z * 1.0 + 5) - 0.5) * 0.13
+        // three scales — big, deep "massive" craters dominate; no spiky high layer
+        const craters =
+          craterShape(worley3(x * 3.2 + 11, y * 3.2 + 11, z * 3.2 + 11)) * 0.11 +
+          craterShape(worley3(x * 6.5 + 23, y * 6.5 + 23, z * 6.5 + 23)) * 0.052 +
+          craterShape(worley3(x * 12.0 + 41, y * 12.0 + 41, z * 12.0 + 41)) * 0.024
+        // fine micro-relief — surface grit, low amplitude so it never spikes
+        const grain = (vnoise(x * 16.0 + 91, y * 16.0 + 91, z * 16.0 + 91) - 0.5) * 0.008
+        // popcorn-ceiling stipple — clustered rounded blobs at two fine scales
+        const popcorn =
+          blobBump(worley3(x * 15.0 + 7, y * 15.0 + 7, z * 15.0 + 7)) * 0.022 +
+          blobBump(worley3(x * 24.0 + 19, y * 24.0 + 19, z * 24.0 + 19)) * 0.014
+        const r = BR * (1 + shape + craters + grain + popcorn)
+        if (r > maxR) maxR = r
+        posAttr.setXYZ(i, x * r, y * r, z * r)
+        // albedo sells crater DEPTH through value: deep floors near-black, rims grey,
+        // with large-scale light/dark patches + fine speckle so the tone is never flat
+        let shade = THREE.MathUtils.clamp(0.46 + craters * 9.0, 0, 1)
+        const patches = 0.34 + 0.66 * fbm3(x * 1.7 + 70, y * 1.7 + 70, z * 1.7 + 70)
+        // two scales of albedo grain so the surface reads dusty/textured, not plastic
+        const tex =
+          (0.78 + 0.22 * fbm3(x * 9.0 + 33, y * 9.0 + 33, z * 9.0 + 33)) *
+          (0.88 + 0.12 * vnoise(x * 22.0 + 88, y * 22.0 + 88, z * 22.0 + 88))
+        // popcorn stipple in the albedo: crevices between the blobs read a touch darker
+        const stipple = 0.78 + 0.22 * Math.min(popcorn / 0.03, 1)
+        shade = THREE.MathUtils.clamp(shade * patches * tex * stipple, 0, 1)
+        colAttr[i * 3] = floorCol[0] + (paleCol[0] - floorCol[0]) * shade
+        colAttr[i * 3 + 1] = floorCol[1] + (paleCol[1] - floorCol[1]) * shade
+        colAttr[i * 3 + 2] = floorCol[2] + (paleCol[2] - floorCol[2]) * shade
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colAttr, 3))
+      geo.computeVertexNormals() // smooth shading — Hyperion's surface is smooth
+      rockCache.set(q.detail, {
+        position: geo.attributes.position.array,
+        index: geo.index.array,
+        normal: geo.attributes.normal.array,
+        color: colAttr,
+        maxR,
+      })
     }
-    geo = geo.toNonIndexed() // expand so each triangle owns its verts -> flat facets
-    geo.computeVertexNormals()
-    // Prototype material — dark matte rock with a faint mineral clearcoat glint.
-    // Physical carries the clearcoat lobe; LOW tier drops to Standard to save it.
-    const mat = q.physical
-      ? new THREE.MeshPhysicalMaterial({
-          color: 0x100f0d,
-          metalness: 0.0,
-          roughness: 0.82,
-          clearcoat: 0.22,
-          clearcoatRoughness: 0.4,
-          iridescence: 0.0,
-          envMapIntensity: 0.4,
-        })
-      : new THREE.MeshStandardMaterial({
-          color: 0x100f0d,
-          metalness: 0.0,
-          roughness: 0.82,
-          envMapIntensity: 0.5,
-        })
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true, // albedo comes from the per-vertex crater shading
+      color: 0xffffff,
+      metalness: 0.0,
+      roughness: 0.96, // very matte regolith
+      envMapIntensity: 0.25,
+    })
     const orb = new THREE.Mesh(geo, mat)
     const BASE_SCALE = CONFIG.radius / BR
     orb.position.set(...CONFIG.pos)
