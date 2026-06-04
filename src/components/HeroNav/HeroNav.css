@@ -33,10 +33,29 @@
   list-style: none;
 }
 .hero-nav a {
-  color: var(--hero-dim);
+  position: relative;
+  display: inline-block;
+  color: var(--hero-text); /* white-ish so the links stand out */
+  transition: color 0.3s ease;
+}
+/* accent underline that sweeps in from the left on hover */
+.hero-nav a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -5px;
+  width: 100%;
+  height: 1px;
+  background: var(--hero-ice);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .hero-nav a:hover {
-  color: var(--hero-text);
+  color: var(--hero-ice);
+}
+.hero-nav a:hover::after {
+  transform: scaleX(1);
 }
 
 @media (max-width: 760px) {

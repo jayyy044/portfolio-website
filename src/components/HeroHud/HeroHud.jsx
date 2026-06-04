@@ -34,13 +34,10 @@ export default function HeroHud() {
   return (
     <div className="hud" ref={hudRef}>
       <div className="title">
-        <div className="k">Object 001 — viewed from orbit</div>
+        <div className="k">Hi, My Name Is</div>
         <h1 className="corm">
           Maanas <em>Saxena</em>
         </h1>
-        <div className="cap corm">
-          Software engineer in the seam between code and the image.
-        </div>
       </div>
     </div>
   )

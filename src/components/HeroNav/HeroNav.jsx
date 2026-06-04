@@ -9,10 +9,10 @@ export default function HeroNav() {
       </span>
       <ul>
         <li>
-          <a href="#">Work</a>
+          <a href="#">Experience</a>
         </li>
         <li>
-          <a href="#">Studio</a>
+          <a href="#">About</a>
         </li>
         <li>
           <a href="#">Contact</a>

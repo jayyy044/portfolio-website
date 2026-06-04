@@ -5,7 +5,7 @@ import './OrbitScene.css'
 
 /* Composition for this variant — the asteroid sits low, viewed from orbit. */
 const CONFIG = {
-  radius: 3.8,
+  radius: 3.55,
   pos: [0, -3.5, 0],
   look: [0, 0.2, 0],
   camZ: 5.6,
@@ -553,13 +553,17 @@ void main(){ vec2 uv=gl_PointCoord-0.5; float d=length(uv);
         fpsEMA = fpsEMA ? fpsEMA * 0.9 + fps * 0.1 : fps
         if (t - lastAdjust > 1) {
           const cap = Math.min(devicePixelRatio, q.dprCap)
-          if (fpsEMA < 52 && curPR > q.dprFloor) {
-            curPR = Math.max(q.dprFloor, curPR * 0.85)
+          let next = curPR
+          if (fpsEMA < 52 && curPR > q.dprFloor) next = Math.max(q.dprFloor, curPR * 0.85)
+          else if (fpsEMA > 58 && curPR < cap) next = Math.min(cap, curPR * 1.07)
+          if (next !== curPR) {
+            curPR = next
             renderer.setPixelRatio(curPR)
-            lastAdjust = t
-          } else if (fpsEMA > 58 && curPR < cap) {
-            curPR = Math.min(cap, curPR * 1.07)
-            renderer.setPixelRatio(curPR)
+            // setPixelRatio reallocates AND clears the drawing buffer; refill it this
+            // frame so the browser never composites one black frame. (That black flash
+            // is the "screenshot jitter": a screenshot's frame-time spike makes the
+            // adaptive loop step the resolution, and each step cleared the buffer.)
+            renderer.render(scene, camera)
             lastAdjust = t
           }
         }

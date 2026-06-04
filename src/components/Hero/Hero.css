@@ -3,7 +3,7 @@
    don't disturb the rest of the app's global styles. Component-specific styles
    live next to their components (OrbitScene / HeroNav / HeroHud); this file holds
    the shared shell (palette vars, base type) and the bits Hero renders directly
-   (grain, reticle). ── */
+   (grain). ── */
 .hero {
   --hero-bg: #04050a;
   --hero-text: #e9e7e2;
@@ -44,35 +44,3 @@
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
 }
 
-/* center reticle */
-.hero .reticle {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  z-index: 9;
-  transform: translate(-50%, -50%);
-  width: 30px;
-  height: 30px;
-  opacity: 0.25;
-  pointer-events: none;
-}
-.hero .reticle::before,
-.hero .reticle::after {
-  content: '';
-  position: absolute;
-  background: var(--hero-ice);
-}
-.hero .reticle::before {
-  left: 50%;
-  top: 0;
-  width: 1px;
-  height: 100%;
-  transform: translateX(-50%);
-}
-.hero .reticle::after {
-  top: 50%;
-  left: 0;
-  height: 1px;
-  width: 100%;
-  transform: translateY(-50%);
-}

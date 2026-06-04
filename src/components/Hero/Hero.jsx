@@ -8,7 +8,6 @@ export default function Hero() {
     <div className="hero">
       <OrbitScene />
       <div className="grain" />
-      <div className="reticle" />
       <HeroNav />
       <HeroHud />
     </div>
