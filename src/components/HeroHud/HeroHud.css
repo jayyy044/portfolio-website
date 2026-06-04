@@ -13,11 +13,12 @@
   text-align: center;
 }
 .hero .title .k {
-  font-size: clamp(13px, 1.5vw, 18px);
-  letter-spacing: 0.36em;
+  font-size: clamp(16px, 2.2vw, 26px);
+  letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--hero-ice);
-  margin-bottom: 20px;
+  font-style: italic;
+  color: var(--hero-text);
+  margin-bottom: 22px;
 }
 .hero .title h1 {
   font-family: 'Geist Mono', monospace;
@@ -30,7 +31,7 @@
 .hero .title h1 em {
   font-style: normal;
   font-weight: 400;
-  color: var(--hero-ice);
+  color: var(--hero-text);
 }
 .hero .title .cap {
   margin-top: 22px;
