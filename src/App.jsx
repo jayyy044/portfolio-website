@@ -1,8 +1,7 @@
 import Hero from './components/Hero/Hero'
 
-// Everything else (Atmosphere, Background, Navbar, ScrollBar, Skills, the old
-// Stage/Bento/Blob hero + Lenis/GSAP scroll wiring) is intentionally
-// disconnected — the page shows only the orbital hero for now.
+// The page is the orbital moon hero — the name in its HUD is now rendered as
+// the animated blue ASCII art (see HeroHud).
 export default function App() {
   return <Hero />
 }
