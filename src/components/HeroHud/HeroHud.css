@@ -13,12 +13,28 @@
   text-align: center;
 }
 .hero .title .k {
-  font-size: clamp(16px, 2.2vw, 26px);
-  letter-spacing: 0.3em;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  font-size: clamp(11px, 1.25vw, 15px);
+  font-weight: 500;
+  letter-spacing: 0.42em;
   text-transform: uppercase;
-  font-style: italic;
-  color: var(--hero-text);
-  margin-bottom: 22px;
+  font-style: normal; /* upright reads like a terminal/transmission label */
+  color: #eef3ff; /* matches the name; size keeps it deferential */
+  margin-bottom: 26px;
+  text-shadow:
+    0 0 9px rgba(157, 180, 255, 0.55),
+    0 0 20px rgba(125, 155, 255, 0.32);
+}
+.hero .title .k::before,
+.hero .title .k::after {
+  content: '';
+  width: 42px;
+  height: 1px;
+  background: var(--hero-ice);
+  opacity: 0.5;
 }
 .hero .title .name-ascii {
   display: inline-block;
@@ -28,12 +44,15 @@
   line-height: 0.95;
   text-align: left;
   white-space: pre;
-  color: var(--hero-ice);
+  color: #eef3ff; /* icy near-white fill — high value contrast so it reads off any background */
   user-select: none;
+  transform: scaleX(1.22);
+  transform-origin: center;
   text-shadow:
-    0 0 1px rgba(157, 180, 255, 0.7),
-    0 0 12px rgba(157, 180, 255, 0.5),
-    0 0 28px rgba(120, 150, 255, 0.32);
+    0 0 2px rgba(190, 208, 255, 0.95),
+    0 0 11px rgba(157, 180, 255, 0.7),
+    0 0 26px rgba(125, 155, 255, 0.55),
+    0 0 46px rgba(110, 140, 255, 0.32);
 }
 .hero .title .name-ascii.settled {
   transition: filter 0.3s ease;
