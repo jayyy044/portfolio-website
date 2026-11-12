@@ -3,6 +3,7 @@
 // layer is painted once per resize, then drifts on its own slow path every
 // frame, so where they overlap the shapes seem to shift.
 import { rng } from './stars'
+import { TILT, smooth } from './blackhole' // the dust band follows the disk's tilt
 
 // ---------- knobs ----------
 const OPACITY = 0.42 // overall strength
@@ -31,13 +32,6 @@ const PATHS = [
 ]
 
 const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-
-const TILT = (17 * Math.PI) / 180 // the black hole disk's tilt; the dust band follows it
-
-const smooth = (x) => {
-  x = x < 0 ? 0 : x > 1 ? 1 : x
-  return x * x * (3 - 2 * x)
-}
 
 // smooth random noise, layered at finer and finer detail (value noise + fbm)
 function valueNoise(seed) {
@@ -90,8 +84,8 @@ function blurUp(img, w, h, blur) {
   return big
 }
 
-export function createNebula(W, H) {
-  const S = Math.min(H, W / 1.35) // the scale the black hole will use too
+// S: one unit of the black hole's maths, in px
+export function createNebula(W, H, S) {
   // layers overhang the screen so drifting and the sky's sway never show an edge
   const M = Math.round(DRIFT + 0.05 * Math.max(W, H)), LW = W + 2 * M, LH = H + 2 * M
   const nw = 220, nh = Math.max(40, Math.round((nw * LH) / LW))
