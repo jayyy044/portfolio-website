@@ -1,17 +1,20 @@
 // The black hole's letter grid. Each update draws the letters onto an offscreen
 // canvas over a fading copy of the last ones (the trail), makes two blurred
-// copies for the glow, and a mask of how much each cell hides the sky behind it.
-// Ported from the black hole page (resize / drawArt / compose).
-import { CHARS, TAG_COLOR, frame } from './blackhole'
+// copies for the glow, a soft black copy (the backing), and a mask of how much
+// each cell hides the sky behind it. Ported from the black hole page.
+import { CHARS, TAG_COLOR, FLASH, frame, smooth } from './blackhole'
 import { rng } from './stars'
 
 const TRAIL = 0.4 // how much of the previous letters survives each 1/30 s
-const GLOWS = [[4, 1.2, 0.75], [8, 2.6, 0.45]] // [shrink factor, blur px, strength]: a tight glow and a wide faint one
+const GLOWS = [[4, 1.2, 0.85], [8, 2.6, 0.6]] // [shrink factor, blur px, strength]: a tight glow and a wide faint one
+const BACKING = 0.7 // how much the gas darkens the sky around and behind it, so the disk sits in front: 0 = not at all
+const BACKING_BLUR = 3 // how far that dark halo spreads past the letters (blur px on a 1/6-size copy)
 
 export function createArt(W, H, dpr, S) {
   const CW = Math.max(4, S / 137), CH = (CW * 11) / 7 // one cell, in px
   const cols = Math.ceil(W / CW), rows = Math.ceil(H / CH), n = cols * rows
-  const font = `500 ${((CW * 12) / 7).toFixed(2)}px "JetBrains Mono", Menlo, Consolas, monospace`
+  const fontPx = Math.round(((CW * 12) / 7) * dpr) / dpr // a whole number of device px renders cleaner
+  const font = `500 ${fontPx.toFixed(3)}px "JetBrains Mono", Menlo, Consolas, monospace`
 
   const art = document.createElement('canvas')
   art.width = Math.round(W * dpr)
@@ -26,15 +29,19 @@ export function createArt(W, H, dpr, S) {
   mask.width = cols
   mask.height = rows
   const mctx = mask.getContext('2d')
+  const bk = document.createElement('canvas') // the backing: blurred, so small is plenty
+  bk.width = Math.max(1, Math.round(W / 6))
+  bk.height = Math.max(1, Math.round(H / 6))
 
-  // every cell's centre, in px and in the maths' units (centred, 1 = S px)
+  // every cell's centre in the maths' units (centred, 1 = S px), and where its
+  // letter is drawn: the same spot snapped to a whole device pixel, so it's sharp
   const R = rng(7)
   const G = { n, X: new Float64Array(n), Y: new Float64Array(n), rnd: new Float64Array(n), hsh: new Int32Array(n), px: new Float32Array(n), py: new Float32Array(n) }
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       const k = j * cols + i, px = (i + 0.5) * CW, py = (j + 0.5) * CH
-      G.px[k] = px
-      G.py[k] = py
+      G.px[k] = Math.round(px * dpr) / dpr
+      G.py[k] = Math.round(py * dpr) / dpr
       G.X[k] = (px - W / 2) / S
       G.Y[k] = (py - H / 2) / S
       G.rnd[k] = R()
@@ -43,23 +50,25 @@ export function createArt(W, H, dpr, S) {
   }
   const out = { char: new Uint8Array(n), tag: new Uint8Array(n), lum: new Float32Array(n), occ: new Float32Array(n) }
 
-  return { W, H, dpr, CW, CH, cols, rows, font, G, out, art, actx: art.getContext('2d'), glows, mask, mctx, maskImg: mctx.createImageData(cols, rows) }
+  return { W, H, dpr, CW, CH, cols, rows, font, G, out, art, actx: art.getContext('2d'), glows, mask, mctx, maskImg: mctx.createImageData(cols, rows), bk, bkx: bk.getContext('2d') }
 }
 
+
+// one colour per (tag, brightness step); key = tag * 512 + step
 const colorCache = new Map()
-function colorOf(tag, lum) {
-  const l = Math.min(511, Math.round(lum * 300)), key = tag * 512 + l
+function colorOf(key) {
   let s = colorCache.get(key)
   if (!s) {
-    const c = TAG_COLOR[tag], f = l / 300
+    const c = TAG_COLOR[key >> 9], f = (key & 511) / 300
     s = `rgb(${Math.min(255, c[0] * f) | 0},${Math.min(255, c[1] * f) | 0},${Math.min(255, c[2] * f) | 0})`
     colorCache.set(key, s)
   }
   return s
 }
 
-// rv: the shock front from reveal(); the letter stars and dust only show inside it
-export function drawArt(A, t, dt, rv) {
+const buckets = new Map() // colour key -> the cells drawn in that colour this update
+
+export function drawArt(A, t, dt) {
   const { G, out, actx } = A
   frame(t, G, out)
 
@@ -74,18 +83,23 @@ export function drawArt(A, t, dt, rv) {
   actx.font = A.font
   actx.textAlign = 'center'
   actx.textBaseline = 'middle'
-  let last = ''
-  const r2 = rv ? (rv.full ? Infinity : rv.r * rv.r) : -1
+  // Group the letters by colour so each colour is set once, not per letter.
+  // 'lighten' keeps whichever is brighter, so the drawing order doesn't matter.
   for (let k = 0; k < G.n; k++) {
-    const ch = out.char[k]
-    if (ch === 0) continue
-    if (out.tag[k] >= 5 && (r2 < 0 || (G.px[k] - rv.cx) ** 2 + (G.py[k] - rv.cy) ** 2 > r2)) continue
-    const col = colorOf(out.tag[k], out.lum[k])
-    if (col !== last) {
-      actx.fillStyle = col
-      last = col
+    if (out.char[k] === 0 || out.tag[k] >= 5) continue // skip the maths' own + * . stars and , : dust: the sky has its own
+    const key = out.tag[k] * 512 + Math.min(511, Math.round(out.lum[k] * 300))
+    let b = buckets.get(key)
+    if (!b) buckets.set(key, (b = { ks: [], n: 0 }))
+    b.ks[b.n++] = k
+  }
+  for (const [key, b] of buckets) {
+    if (!b.n) continue
+    actx.fillStyle = colorOf(key)
+    for (let i = 0; i < b.n; i++) {
+      const k = b.ks[i]
+      actx.fillText(CHARS[out.char[k]], G.px[k], G.py[k])
     }
-    actx.fillText(CHARS[ch], G.px[k], G.py[k])
+    b.n = 0
   }
   actx.globalCompositeOperation = 'source-over'
 
@@ -95,12 +109,27 @@ export function drawArt(A, t, dt, rv) {
     g.cx.drawImage(A.art, 0, 0, g.c.width, g.c.height)
     g.cx.filter = 'none'
   }
+
+  // the backing: the letters' shape, blurred and filled black
+  const { bk, bkx } = A
+  bkx.globalCompositeOperation = 'source-over'
+  bkx.clearRect(0, 0, bk.width, bk.height)
+  bkx.filter = `blur(${BACKING_BLUR}px)`
+  bkx.drawImage(A.art, 0, 0, bk.width, bk.height)
+  bkx.filter = 'none'
+  bkx.globalCompositeOperation = 'source-in'
+  bkx.fillStyle = '#000'
+  bkx.fillRect(0, 0, bk.width, bk.height)
 }
 
-// on top of the sky: the mask darkens what the hole hides, then letters and glow add light
-export function composeArt(ctx, A) {
+// On top of the sky: the mask hides what the hole covers, the backing dims the
+// sky around the gas (fading in after the flash, as the sky appears), then the
+// letters and glow add light.
+export function composeArt(ctx, A, t) {
   ctx.imageSmoothingEnabled = true
   ctx.drawImage(A.mask, 0, 0, A.cols * A.CW, A.rows * A.CH)
+  ctx.globalAlpha = BACKING * smooth((t - FLASH - 0.5) / 2)
+  if (ctx.globalAlpha > 0.001) ctx.drawImage(A.bk, 0, 0, A.W, A.H)
   ctx.globalCompositeOperation = 'lighter'
   ctx.globalAlpha = 1
   ctx.drawImage(A.art, 0, 0, A.W, A.H)

@@ -36,7 +36,8 @@ function ripple(a, b, t) {
 
 // thin rings of gas on circular orbits; the inner ones turn faster
 function gas(phi, rho, t, w, pulseK) {
-  const phase = phi - Math.pow(rho / R_IN, -1.5) * w
+  const x = rho / R_IN
+  const phase = phi - w / (x * Math.sqrt(x)) // (rho / R_IN) ** -1.5, cheaper
   const lr = Math.log(rho / R0)
   const a = 46 * lr + 0.9 * Math.sin(phase + 3 * lr)
   let streak = 0.55 + 0.3 * Math.sin(a) + 0.15 * Math.sin(2.3 * a + 2 * phase) + 0.12 * Math.sin(3 * phase - 7 * lr + 0.3 * t)
@@ -44,9 +45,11 @@ function gas(phi, rho, t, w, pulseK) {
     // sparks of light ride the orbits after the flash
     let pulses = 0
     for (const [lrr, start, speed] of PULSES) {
+      const dl = lr - lrr
+      if (dl > 0.25 || dl < -0.25) continue // off this spark's orbit: its falloff is under 1e-5 out here
       const d = pmod(phi - start - speed * t + Math.PI, TAU) - Math.PI
       const comet = d > 0 ? Math.exp(-((d / 0.18) ** 2)) : Math.exp(d / 0.9)
-      pulses += comet * Math.exp(-(((lr - lrr) / 0.07) ** 2))
+      pulses += comet * Math.exp(-((dl / 0.07) ** 2))
     }
     streak += 0.9 * pulseK * pulses
   }
@@ -82,8 +85,8 @@ export function frame(t, G, out, dive = 1, ox = 0, oy = 0) { // dive > 1 moves i
 
   for (let k = 0; k < G.n; k++) {
     const X = (G.X[k] - ox) / zoom, Y = (G.Y[k] - oy + 0.02 * cam) / zoom
-    const r = Math.hypot(X, Y)
-    const ang = Math.atan2(Y, X)
+    const r = Math.sqrt(X * X + Y * Y)
+    const ang = r < 4.0 * R0 ? Math.atan2(Y, X) : 0 // ring, glow and halo all sit inside 4 R0; past that it's unused
 
     // 1. the circle draws itself
     const dr = r - 1.02 * R0
@@ -103,11 +106,13 @@ export function frame(t, G, out, dive = 1, ox = 0, oy = 0) { // dive > 1 moves i
     // 3. the disk spreads out sideways, then lights up
     const u = X * cT + Y * sT
     const v = -X * sT + Y * cT
-    const rho = Math.hypot(u, v / inc)
-    const phi = Math.atan2(v / inc, u)
+    const vi = v / inc
+    const rho = Math.sqrt(u * u + vi * vi)
+    let phi // the angle round the disk; only worked out where it gets used
     let disk = 0
     const spanK = diskK > 0 ? smooth((span - Math.abs(u)) / (0.6 * R0)) : 0
     if (spanK > 0 && rho > R_IN - 0.25 * R0 && rho < R_OUT) {
+      phi = Math.atan2(vi, u)
       const edge = smooth((rho - R_IN) / (0.25 * R0)) * smooth((R_OUT - rho) / (2.2 * R0))
       disk = 1.5 * edge * gas(phi, rho, t, w, pulseK) * (R_IN / rho)
       disk *= 1 - (0.25 * u) / Math.max(rho, 1e-6) // the side coming toward us is brighter
@@ -126,7 +131,8 @@ export function frame(t, G, out, dive = 1, ox = 0, oy = 0) { // dive > 1 moves i
       halo = 1.2 * band * gas(ang - TILT, hrho, t, w, pulseK) * (0.5 + 0.8 * top) * (1 - 0.25 * Math.cos(ang - TILT)) * haloK
     }
 
-    const shock = shockK > 0 ? Math.exp(-(((r - front) / 0.02) ** 2)) * shockK : 0
+    // the shock is a thin ring: five widths away it is under 1e-10, so skip the exp
+    const shock = shockK > 0 && Math.abs(r - front) < 0.1 ? Math.exp(-(((r - front) / 0.02) ** 2)) * shockK : 0
 
     // screen blend instead of max, so glow, halo and disk melt into each other
     let soft = 1 - (1 - clamp01(aura * 0.55)) * (1 - clamp01(halo)) * (1 - clamp01(disk))
@@ -140,8 +146,10 @@ export function frame(t, G, out, dive = 1, ox = 0, oy = 0) { // dive > 1 moves i
     const on = heat > 0.07
     let ch = 0
     if (on) {
+      phi ??= Math.atan2(vi, u)
       const level = Math.min(Math.max(Math.floor(heat * 3.6), 0), 3)
-      const phase = phi - Math.pow(rho / R_IN, -1.5) * w, lr = Math.log(rho / R0)
+      const x = rho / R_IN
+      const phase = phi - w / (x * Math.sqrt(x)), lr = Math.log(rho / R0)
       ch = FILL[level][pmod(G.hsh[k] + Math.trunc(phase * 2 + lr * 6), 12)]
     }
     if (on && ring > aura * 0.8 && ring > disk && ring > halo && ring > 0.25) ch = tangentLetter(-Math.sin(ang), Math.cos(ang))
