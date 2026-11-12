@@ -6,6 +6,12 @@
   padding: 0;
 }
 
+html,
+body {
+  background: #000;
+  color: #e9e6ee;
+}
+
 body {
   font-family: system-ui, sans-serif;
   line-height: 1.5;
