@@ -1,39 +1,54 @@
 import { useEffect, useRef } from 'react'
 import { createStars, drawStars } from './stars'
 import { createNebula, drawNebula } from './nebula'
-import { reveal } from './blackhole'
+import { reveal, hole, INTRO_END } from './blackhole'
+import { createLensing } from './lensing'
 import { createArt, drawArt, composeArt } from './ascii'
 import './Skybackground.css'
 
-const FPS = 30 // redraws a second: the letters, twinkle and drift are all slow enough; scrolling redraws at once
-const INTRO_END = 13 // seconds: by then the black hole has finished drawing itself
+const FPS = 30 // redraws a second: the letters and the sky's motion are both slow enough; scrolling and the shock front redraw every frame
 const SPEED = 1.5 // how fast the clock runs: 2 = twice as fast, 0.5 = half
 const SWAY_X = 14, SWAY_Y = 9 // how far the whole sky sways, in px
 
-// Fixed full-screen canvas behind the page: the sky, the black hole, and later
-// the comet. Owns sizing, the intro clock and the frame loop; each layer lives
-// in its own module.
+// Fixed full-screen canvas behind the page: the sky (ray-traced around the hole,
+// or a flat 2D one if WebGL isn't there), the black hole, and later the comet.
+// Owns sizing, the intro clock and the frame loop; each layer lives in its own module.
 export default function Skybackground() {
   const canvasRef = useRef(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
-    const bg = document.createElement('canvas') // the still parts, painted once per resize
+    const bg = document.createElement('canvas') // the flat sky's still parts
     const bctx = bg.getContext('2d')
+    const lens = createLensing()
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     let t = reduced ? INTRO_END : 0 // the intro clock, in seconds; reduced motion skips the intro
-    let W = 0, H = 0, dpr = 1, S, nebula, stars, art, raf, resizeTimer, dprQuery
-    let last = 0, acc = 0, lastScroll = 0
+    let W = 0, H = 0, dpr = 1, S, nebula, stars, art, raf, dprQuery, buildTimer
+    let last = 0, acc = 0, lastScroll = 0, flatReady = false
 
     // w, h: the canvas in css px; pw, ph: in device px
     function resize(w, h, pw, ph) {
+      const first = !W
       W = w
       H = h
       dpr = pw / w // the real scale, so whole device pixels really are whole
       S = Math.min(H, W / 1.35) // one unit of the black hole's maths, in px
       canvas.width = pw
       canvas.height = ph
+      flatReady = false // the fallback sky is only built if it's needed
+      art = createArt(W, H, dpr, S)
+      lens.fit(W, H, S, dpr)
+      // updates up front so the letters' trail is already there; one is enough mid-resize
+      for (let i = first ? 0 : 3; i < 4; i++) {
+        const ti = t - (3 - i) / FPS
+        drawArt(art, ti, 1 / FPS)
+      }
+      acc = 1 / FPS // redraw on the very next frame
+    }
+
+    // the fallback sky (no WebGL): built the first time it's needed at this size
+    function buildFlatSky() {
       // the background overhangs the screen by the sway, and is drawn 1:1 so the faint stars stay sharp
       const bw = W + 2 * SWAY_X, bh = H + 2 * SWAY_Y
       bg.width = Math.round(bw * dpr)
@@ -46,13 +61,7 @@ export default function Skybackground() {
       bctx.fillRect(0, 0, bw, bh)
       stars = createStars(bctx, W, H, dpr, SWAY_X, SWAY_Y)
       nebula = createNebula(W, H, S)
-      art = createArt(W, H, dpr, S)
-      // a few updates up front, so the letters' trail is already there
-      for (let i = 0; i < 4; i++) {
-        const ti = t - (3 - i) / FPS
-        drawArt(art, ti, 1 / FPS)
-      }
-      acc = 1 / FPS // redraw on the very next frame
+      flatReady = true
     }
 
     function draw(rv, scroll) {
@@ -63,12 +72,13 @@ export default function Skybackground() {
       ctx.fillStyle = '#000'
       ctx.fillRect(0, 0, W, H)
       // the sky stays dark until the flash's shock front sweeps out and uncovers it
+      let lensed = false
       if (rv) {
-        const ox = Math.sin(t * 0.6 * 0.031) * SWAY_X, oy = Math.cos(t * 0.6 * 0.023) * SWAY_Y // a slow sway
-        const snap = (v) => Math.round(v * dpr) / dpr
-        ctx.drawImage(bg, snap(ox - SWAY_X), snap(oy - SWAY_Y), bg.width / dpr, bg.height / dpr)
-        drawNebula(ctx, nebula, t, ox, oy)
-        drawStars(ctx, stars, t, ox, oy, scroll)
+        if (!lens.tried) lens.init() // normally built already, while the ring was drawing
+        // reduced motion: the sky holds still (near the hole the lensing turns a slow spin into a lot of motion)
+        lensed = lens.draw(hole(t, W, H, S), reduced ? INTRO_END : t)
+        if (lensed) ctx.drawImage(lens.canvas, 0, 0, W, H)
+        else drawFlatSky(scroll)
         if (!rv.full) {
           const soft = Math.max(24, 0.1 * S)
           const g = ctx.createRadialGradient(rv.cx, rv.cy, Math.max(0, rv.r - soft), rv.cx, rv.cy, rv.r)
@@ -78,7 +88,17 @@ export default function Skybackground() {
           ctx.fillRect(0, 0, W, H)
         }
       }
-      composeArt(ctx, art, t)
+      composeArt(ctx, art, t, lensed)
+    }
+
+    // the fallback sky: gradient, faint stars, nebula and twinkling stars, swaying slowly
+    function drawFlatSky(scroll) {
+      if (!flatReady) buildFlatSky()
+      const ox = Math.sin(t * 0.6 * 0.031) * SWAY_X, oy = Math.cos(t * 0.6 * 0.023) * SWAY_Y
+      const snap = (v) => Math.round(v * dpr) / dpr
+      ctx.drawImage(bg, snap(ox - SWAY_X), snap(oy - SWAY_Y), bg.width / dpr, bg.height / dpr)
+      drawNebula(ctx, nebula, t, ox, oy)
+      drawStars(ctx, stars, t, ox, oy, scroll)
     }
 
     function loop(now) {
@@ -92,7 +112,8 @@ export default function Skybackground() {
         drawArt(art, t, acc)
         acc = 0
       }
-      if (tick || scroll !== lastScroll) {
+      // the shock front is the one fast thing: while it's crossing the screen, redraw every frame
+      if (tick || scroll !== lastScroll || (rv && !rv.full)) {
         lastScroll = scroll
         draw(rv, scroll)
       }
@@ -102,7 +123,6 @@ export default function Skybackground() {
     // Size the canvas to exactly the device pixels it covers, or the browser
     // rescales it and everything goes soft. Past 2x costs a lot for little, so cap there.
     function fit(w, h, box) {
-      clearTimeout(resizeTimer) // the latest size wins, including going back to the current one
       if (!w || !h) return // hidden or not laid out yet; the observer reports again once it is
       const real = window.devicePixelRatio || 1, d = Math.min(real, 2)
       // trust the exact size only when it agrees with css size x density (DevTools emulation reports the real screen's)
@@ -117,8 +137,18 @@ export default function Skybackground() {
         })
         return
       }
-      // rebuilding takes a moment (the nebula most), so wait until resizing settles
-      resizeTimer = setTimeout(() => resize(w, h, pw, ph), 120)
+      // Rebuild for the new size straight away, on every frame the window is being
+      // resized, so the black hole follows it smoothly. No timer: browsers can hold
+      // timers back during a drag, which made it wait until the drag was let go.
+      rebuild(w, h, pw, ph)
+    }
+
+    // resize, then draw at once: setting the canvas size clears it, and this can run
+    // just before the browser paints, so it must never be left blank
+    function rebuild(w, h, pw, ph) {
+      resize(w, h, pw, ph)
+      lastScroll = window.scrollY
+      draw(reveal(t, W, H, S), lastScroll)
     }
 
     // Chrome and Firefox report the exact device-pixel size too. A change of pixel
@@ -141,9 +171,11 @@ export default function Skybackground() {
     document.fonts?.load('500 12px "JetBrains Mono"') // the letters use it; nothing else on the page asks for it yet
     observe()
     watchDpr()
+    buildTimer = setTimeout(() => lens.init(), 500) // build the lensed sky while only the ring is drawing
     return () => {
+      clearTimeout(buildTimer)
+      lens.dispose()
       cancelAnimationFrame(raf)
-      clearTimeout(resizeTimer)
       ro.disconnect()
       dprQuery?.removeEventListener('change', onDpr)
     }

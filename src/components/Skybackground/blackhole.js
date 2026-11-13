@@ -185,12 +185,19 @@ export function frame(t, G, out, dive = 1, ox = 0, oy = 0) { // dive > 1 moves i
   out.spin = w
 }
 
+export const INTRO_END = 13 // seconds: by then the black hole has finished drawing itself
+
+// where the hole is on screen at time t: centre and shadow radius in px, how far
+// the maths' camera has eased in (it does just after the flash), and the disk's tilt
+export function hole(t, W, H, S) {
+  const cam = smooth(smooth((t - FLASH + 0.3) / 2.6)), zoom = 1 + 0.28 * cam
+  return { cx: W / 2, cy: H / 2 - 0.02 * cam * S, R: R0 * zoom * S, cam, inc: INC + 0.09 * cam }
+}
+
 // the flash's shock front, in screen px: the sky inside it is uncovered
 export function reveal(t, W, H, S) {
   if (t <= FLASH) return null
-  const cam = smooth(smooth((t - FLASH + 0.3) / 2.6)), zoom = 1 + 0.28 * cam
-  const front = R0 + (t - FLASH) * 0.55
-  const cx = W / 2, cy = H / 2 - 0.02 * cam * S, r = front * zoom * S
-  const far = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy))
-  return { cx, cy, r, full: r > far + 0.2 * S }
+  const h = hole(t, W, H, S), r = (R0 + (t - FLASH) * 0.55) * (1 + 0.28 * h.cam) * S
+  const far = Math.hypot(Math.max(h.cx, W - h.cx), Math.max(h.cy, H - h.cy))
+  return { cx: h.cx, cy: h.cy, r, full: r > far + 0.2 * S }
 }

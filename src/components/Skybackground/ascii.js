@@ -11,7 +11,8 @@ const BACKING = 0.7 // how much the gas darkens the sky around and behind it, so
 const BACKING_BLUR = 3 // how far that dark halo spreads past the letters (blur px on a 1/6-size copy)
 
 export function createArt(W, H, dpr, S) {
-  const CW = Math.max(4, S / 137), CH = (CW * 11) / 7 // one cell, in px
+  // one cell, in px; it stops growing past S = 900, so big screens get a finer disk instead of bigger letters
+  const CW = Math.max(4, Math.min(S, 900) / 137), CH = (CW * 11) / 7
   const cols = Math.ceil(W / CW), rows = Math.ceil(H / CH), n = cols * rows
   const fontPx = Math.round(((CW * 12) / 7) * dpr) / dpr // a whole number of device px renders cleaner
   const font = `500 ${fontPx.toFixed(3)}px "JetBrains Mono", Menlo, Consolas, monospace`
@@ -124,10 +125,12 @@ export function drawArt(A, t, dt) {
 
 // On top of the sky: the mask hides what the hole covers, the backing dims the
 // sky around the gas (fading in after the flash, as the sky appears), then the
-// letters and glow add light.
-export function composeArt(ctx, A, t) {
+// letters and glow add light. lensed: the sky is the ray-traced one, which draws
+// its own shadow, so the mask fades out once that sky is in.
+export function composeArt(ctx, A, t, lensed) {
   ctx.imageSmoothingEnabled = true
-  ctx.drawImage(A.mask, 0, 0, A.cols * A.CW, A.rows * A.CH)
+  ctx.globalAlpha = lensed ? 1 - smooth((t - FLASH - 1) / 3) : 1
+  if (ctx.globalAlpha > 0.001) ctx.drawImage(A.mask, 0, 0, A.cols * A.CW, A.rows * A.CH)
   ctx.globalAlpha = BACKING * smooth((t - FLASH - 0.5) / 2)
   if (ctx.globalAlpha > 0.001) ctx.drawImage(A.bk, 0, 0, A.W, A.H)
   ctx.globalCompositeOperation = 'lighter'

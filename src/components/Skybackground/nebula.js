@@ -34,7 +34,7 @@ const PATHS = [
 const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 // smooth random noise, layered at finer and finer detail (value noise + fbm)
-function valueNoise(seed) {
+export function valueNoise(seed) {
   const R = rng(seed), perm = new Uint8Array(512), val = new Float32Array(256)
   for (let i = 0; i < 256; i++) { perm[i] = i; val[i] = R() }
   for (let i = 255; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]] }
