@@ -1,5 +1,4 @@
-// blackhole.js: port of black_hole.py by JIN2 (@jin_22ee), 2026 (free for personal projects).
-// Same math, one character cell at a time. Taken from the black hole page's BH module.
+// The black hole's maths, one character cell at a time. Taken from the black hole page's BH module.
 const TAU = Math.PI * 2
 const POOLS = ['1il!;:', 'rtfjcvxz=+', 'aeoun0{}[]<>', '08B$#&%Q'] // dark -> bright
 export const CHARS = ' .,:~+*^01|/\\-_#()x' + POOLS.join('')
