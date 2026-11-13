@@ -10,3 +10,13 @@
   height: 100lvh;
   background: #000;
 }
+
+/* measures the short viewport (a phone's toolbar showing), where the hole comes to rest */
+.sky-probe {
+  position: fixed;
+  top: 0;
+  width: 0;
+  height: 100svh;
+  visibility: hidden;
+  pointer-events: none;
+}

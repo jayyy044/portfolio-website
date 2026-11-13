@@ -12,6 +12,21 @@ body {
   color: #e9e6ee;
 }
 
+/* the page scrolls, but shows no scrollbar */
+html {
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+}
+
+/* no scrolling while the intro plays (Skybackground sets and clears it) */
+html.locked,
+html.locked body {
+  overflow: hidden;
+}
+
 body {
   font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   line-height: 1.5;

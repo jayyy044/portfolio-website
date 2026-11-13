@@ -1,31 +1,48 @@
 import { useEffect, useRef } from 'react'
 import { createStars, drawStars } from './stars'
 import { createNebula, drawNebula } from './nebula'
-import { reveal, hole, INTRO_END } from './blackhole'
+import { reveal, hole, rest, smooth, INTRO_END } from './blackhole'
 import { createLensing } from './lensing'
 import { createArt, drawArt, composeArt } from './ascii'
 import './Skybackground.css'
 
 const FPS = 30 // redraws a second: the letters and the sky's motion are both slow enough; scrolling and the shock front redraw every frame
-const SPEED = 1.5 // how fast the clock runs: 2 = twice as fast, 0.5 = half
+const SPEED = 1.75 // how fast the clock runs: 2 = twice as fast, 0.5 = half
 const SWAY_X = 14, SWAY_Y = 9 // how far the whole sky sways, in px
+const MOVE_ROOM = 1 // screens of scroll, after the intro, that take the hole down to its resting place; also the page's scroll room
+const SCROLL_EASE = 8 // how quickly the hole catches up with the scroll, per second: higher follows tighter, lower glides more
+const SKIP_INTRO = true // TEMPORARY, for tuning: start at the end of the intro, hole already where the scroll puts it. Set false to get the intro back
+
+// dev only: the sky is set up once, in an effect that hot updates don't re-run, so a knob edit
+// would change nothing on screen. Reload instead (the scroll position survives it)
+import.meta.hot?.on('vite:beforeUpdate', () => location.reload())
 
 // Fixed full-screen canvas behind the page: the sky (ray-traced around the hole,
 // or a flat 2D one if WebGL isn't there), the black hole, and later the comet.
 // Owns sizing, the intro clock and the frame loop; each layer lives in its own module.
 export default function Skybackground() {
   const canvasRef = useRef(null)
+  const probeRef = useRef(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
+    const probe = probeRef.current // 100svh: the short viewport, a phone's toolbar showing
     const ctx = canvas.getContext('2d')
     const bg = document.createElement('canvas') // the flat sky's still parts
     const bctx = bg.getContext('2d')
     const lens = createLensing()
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    let t = reduced ? INTRO_END : 0 // the intro clock, in seconds; reduced motion skips the intro
+    let t = reduced || SKIP_INTRO ? INTRO_END : 0 // the intro clock, in seconds; reduced motion skips the intro
+    // no scrolling until the intro is over (index.css: html.locked)
+    const root = document.documentElement
+    let locked = t < INTRO_END
+    root.classList.toggle('locked', locked)
     let W = 0, H = 0, dpr = 1, S, nebula, stars, art, raf, dprQuery, buildTimer
     let last = 0, acc = 0, lastScroll = 0, flatReady = false
+    let B, sS = 0 // the hole's resting place (rest()); the scroll it follows, eased, in screens
+
+    // the hole at clock ti, as far toward its resting place as the eased scroll has taken it
+    const holeAt = (ti) => hole(ti, W, H, S, smooth(sS / MOVE_ROOM), B)
 
     // w, h: the canvas in css px; pw, ph: in device px
     function resize(w, h, pw, ph) {
@@ -34,6 +51,8 @@ export default function Skybackground() {
       H = h
       dpr = pw / w // the real scale, so whole device pixels really are whole
       S = Math.min(H, W / 1.35) // one unit of the black hole's maths, in px
+      B = rest(W, Math.min(H, probe.clientHeight || H), S) // it rests inside the short viewport, so a toolbar never hides it
+      if (first && t >= INTRO_END) sS = Math.min(Math.max(window.scrollY / H, 0), MOVE_ROOM) // no intro: start where the scroll is, no glide
       canvas.width = pw
       canvas.height = ph
       flatReady = false // the fallback sky is only built if it's needed
@@ -42,7 +61,7 @@ export default function Skybackground() {
       // updates up front so the letters' trail is already there; one is enough mid-resize
       for (let i = first ? 0 : 3; i < 4; i++) {
         const ti = t - (3 - i) / FPS
-        drawArt(art, ti, 1 / FPS)
+        drawArt(art, ti, 1 / FPS, holeAt(ti))
       }
       acc = 1 / FPS // redraw on the very next frame
     }
@@ -64,7 +83,8 @@ export default function Skybackground() {
       flatReady = true
     }
 
-    function draw(rv, scroll) {
+    // h: the hole now
+    function draw(rv, scroll, h) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.globalCompositeOperation = 'source-over' // start clean, whatever a layer left behind
       ctx.globalAlpha = 1
@@ -76,7 +96,7 @@ export default function Skybackground() {
       if (rv) {
         if (!lens.tried) lens.init() // normally built already, while the ring was drawing
         // reduced motion: the sky holds still (near the hole the lensing turns a slow spin into a lot of motion)
-        lensed = lens.draw(hole(t, W, H, S), reduced ? INTRO_END : t)
+        lensed = lens.draw(h, hole(t, W, H, S), reduced ? INTRO_END : t)
         if (lensed) ctx.drawImage(lens.canvas, 0, 0, W, H)
         else drawFlatSky(scroll)
         if (!rv.full) {
@@ -105,17 +125,27 @@ export default function Skybackground() {
       const dt = Math.min((now - last) / 1000, 0.1) // capped, so a hidden tab doesn't jump ahead
       last = now
       t += dt * SPEED
+      if (locked && t >= INTRO_END) {
+        locked = false
+        root.classList.remove('locked')
+      }
       acc += dt // real time: FPS redraws a real second whatever the speed
-      const tick = acc >= 1 / FPS - 0.004, scroll = window.scrollY
-      const rv = reveal(t, W, H, S)
-      if (tick) {
-        drawArt(art, t, acc)
+      const scroll = window.scrollY
+      // after the intro the hole follows the scroll, eased (at the same pace whatever the frame rate) so it glides
+      const target = t >= INTRO_END ? Math.min(Math.max(scroll / H, 0), MOVE_ROOM) : 0
+      const moving = sS !== target
+      if (moving) sS = Math.abs(target - sS) < 2e-4 ? target : sS + (target - sS) * (1 - Math.exp(-dt * SCROLL_EASE))
+      const h = holeAt(t), rv = reveal(t, W, H, S)
+      // the letters update FPS times a second, and on every frame while the hole is moving
+      const update = moving || acc >= 1 / FPS - 0.004
+      if (update) {
+        drawArt(art, t, acc, h, moving)
         acc = 0
       }
-      // the shock front is the one fast thing: while it's crossing the screen, redraw every frame
-      if (tick || scroll !== lastScroll || (rv && !rv.full)) {
+      // the shock front is the other fast thing: while it's crossing the screen, redraw every frame
+      if (update || scroll !== lastScroll || (rv && !rv.full)) {
         lastScroll = scroll
-        draw(rv, scroll)
+        draw(rv, scroll, h)
       }
       raf = requestAnimationFrame(loop)
     }
@@ -148,7 +178,8 @@ export default function Skybackground() {
     function rebuild(w, h, pw, ph) {
       resize(w, h, pw, ph)
       lastScroll = window.scrollY
-      draw(reveal(t, W, H, S), lastScroll)
+      const now = holeAt(t)
+      draw(reveal(t, W, H, S), lastScroll, now)
     }
 
     // Chrome and Firefox report the exact device-pixel size too. A change of pixel
@@ -174,6 +205,7 @@ export default function Skybackground() {
     buildTimer = setTimeout(() => lens.init(), 500) // build the lensed sky while only the ring is drawing
     return () => {
       clearTimeout(buildTimer)
+      root.classList.remove('locked')
       lens.dispose()
       cancelAnimationFrame(raf)
       ro.disconnect()
@@ -181,5 +213,12 @@ export default function Skybackground() {
     }
   }, [])
 
-  return <canvas ref={canvasRef} className="sky" aria-hidden="true" />
+  return (
+    <>
+      <canvas ref={canvasRef} className="sky" aria-hidden="true" />
+      <div ref={probeRef} className="sky-probe" />
+      {/* room to scroll the hole down into place; the content sections will take this over */}
+      <div style={{ height: `${(1 + MOVE_ROOM) * 100}lvh` }} aria-hidden="true" />
+    </>
+  )
 }

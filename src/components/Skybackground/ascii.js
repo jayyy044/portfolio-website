@@ -6,6 +6,7 @@ import { CHARS, TAG_COLOR, FLASH, frame, smooth } from './blackhole'
 import { rng } from './stars'
 
 const TRAIL = 0.4 // how much of the previous letters survives each 1/30 s
+const MOVING_TRAIL = 0.1 // how much survives each update while the hole is moving, so it doesn't smear
 const GLOWS = [[4, 1.2, 0.85], [8, 2.6, 0.6]] // [shrink factor, blur px, strength]: a tight glow and a wide faint one
 const BACKING = 0.7 // how much the gas darkens the sky around and behind it, so the disk sits in front: 0 = not at all
 const BACKING_BLUR = 3 // how far that dark halo spreads past the letters (blur px on a 1/6-size copy)
@@ -51,7 +52,7 @@ export function createArt(W, H, dpr, S) {
   }
   const out = { char: new Uint8Array(n), tag: new Uint8Array(n), lum: new Float32Array(n), occ: new Float32Array(n) }
 
-  return { W, H, dpr, CW, CH, cols, rows, font, G, out, art, actx: art.getContext('2d'), glows, mask, mctx, maskImg: mctx.createImageData(cols, rows), bk, bkx: bk.getContext('2d') }
+  return { W, H, dpr, S, CW, CH, cols, rows, font, G, out, art, actx: art.getContext('2d'), glows, mask, mctx, maskImg: mctx.createImageData(cols, rows), bk, bkx: bk.getContext('2d') }
 }
 
 
@@ -69,16 +70,17 @@ function colorOf(key) {
 
 const buckets = new Map() // colour key -> the cells drawn in that colour this update
 
-export function drawArt(A, t, dt) {
+// h: the hole now (blackhole.js's hole()); moved: it has moved since the last update
+export function drawArt(A, t, dt, h, moved = false) {
   const { G, out, actx } = A
-  frame(t, G, out)
+  frame(t, G, out, h.dive, 0, (h.cy - A.H / 2) / A.S + 0.02 * h.cam, h.inc, h.tilt) // the maths, centred on the hole
 
   for (let k = 0; k < G.n; k++) A.maskImg.data[4 * k + 3] = out.occ[k] * 255
   A.mctx.putImageData(A.maskImg, 0, 0)
 
   actx.setTransform(A.dpr, 0, 0, A.dpr, 0, 0)
   actx.globalCompositeOperation = 'destination-out' // fade what is already there
-  actx.fillStyle = `rgba(0,0,0,${(1 - Math.pow(TRAIL, dt * 30)).toFixed(4)})`
+  actx.fillStyle = `rgba(0,0,0,${moved ? 1 - MOVING_TRAIL : (1 - Math.pow(TRAIL, dt * 30)).toFixed(4)})`
   actx.fillRect(0, 0, A.W, A.H)
   actx.globalCompositeOperation = 'lighten'
   actx.font = A.font

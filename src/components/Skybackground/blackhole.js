@@ -15,12 +15,26 @@ export const TILT = (17 * Math.PI) / 180
 const INC = 0.12
 const R_IN = 1.55 * R0, R_OUT = 5.4 * R0
 export const FLASH = 7.8
-const cT = Math.cos(TILT), sT = Math.sin(TILT)
+// ---------- where the hole rests once the intro is over and the page is scrolled ----------
+const REST_INC = 0.08 // the disk at rest: nearly edge-on (keep it above 0, seen from above)
+const REST_TILT = 0 // and level, in radians (the intro's is 17°)
+const REST_MARGIN = 24 // px kept clear between the drawing and the screen's left, right and top edges
+const REST_TIPS_ON = 0.58 // how much of each disk tip must stay on screen: 1 = all of it, lower = bigger hole (the outermost letters are faint)
+const REST_LIFT = 0.5// the hole's centre above the bottom edge, in shadow radii: 1 = shadow sits on the edge, lower sinks it more (v4 used 0.3)
+const REST_ZOOM_MAX = 1.5 // the most it grows past its end-of-intro size; it grows less if it wouldn't fit
+// The drawing's reach from the hole's centre, in shadow radii, at REST_INC / REST_TILT. Measured, not
+// tuned: frame() on a grid of R/60 cells, t = 13..73, bounding box of the letters it lights (tags < 5);
+// re-measure if the pose or the model changes. Got left 4.88, right 4.68, top 1.83 (bottom 1.62, now cut by the edge). Glow included:
+// in headless screenshots at six screen sizes no warm pixel reached past this box
+const REST_HALF_WIDTH = 4.9 // the disk's tips (the brighter left one reaches further)
+const REST_TOP = 1.85 // the arc bent over the top of the shadow
+
 const PULSES = [[1.8, 0.0, 0.95], [2.4, 2.1, 0.8], [3.2, 4.2, 0.65]].map(([rr, st, sp]) => [Math.log(rr), st, sp])
 
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x)
 export const smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x) }
 const pmod = (a, n) => ((a % n) + n) % n
+const lerp = (a, b, k) => a + (b - a) * k
 
 function spin(t) {
   const s = Math.max(t - FLASH, 0)
@@ -65,9 +79,11 @@ function tangentLetter(dx, dy) {
 
 // G: { n, X, Y (Float64Array, frame-height units), rnd (Float64Array), hsh (Int32Array) }
 // out: { char (Uint8Array), tag (Uint8Array), lum (Float32Array), occ? (Float32Array) }; also gets heatMax, count, spin
-export function frame(t, G, out, dive = 1, ox = 0, oy = 0) { // dive > 1 moves in; ox, oy move the hole on screen
+// dive > 1 moves in; ox, oy move the hole on screen; incSet, tiltSet set the disk's pose (null: the intro's)
+export function frame(t, G, out, dive = 1, ox = 0, oy = 0, incSet = null, tiltSet = null) {
+  const TL = tiltSet ?? TILT, cT = Math.cos(TL), sT = Math.sin(TL)
   const cam = smooth(smooth((t - FLASH + 0.3) / 2.6))
-  const zoom = (1 + 0.28 * cam) * dive, inc = INC + 0.09 * cam
+  const zoom = (1 + 0.28 * cam) * dive, inc = incSet ?? INC + 0.09 * cam
   const w = spin(t)
   const flash = Math.exp(-(((t - FLASH) / 0.22) ** 2))
   const pulseK = smooth((t - FLASH) / 1.0)
@@ -97,7 +113,7 @@ export function frame(t, G, out, dive = 1, ox = 0, oy = 0) { // dive > 1 moves i
     let aura = 0
     if (auraK > 0 && r - R0 < 1.6 * R0) {
       let puff = 0.5 + 0.5 * ripple(2 * ang, 5 * r - 0.45 * t, 0.35 * t)
-      if (diskOn > 0) puff = puff * (1 - diskOn) + gas(ang - TILT, R_IN + Math.max(r - 1.0 * R0, 0) * 2.6, t, w, pulseK) * diskOn
+      if (diskOn > 0) puff = puff * (1 - diskOn) + gas(ang - TL, R_IN + Math.max(r - 1.0 * R0, 0) * 2.6, t, w, pulseK) * diskOn
       const reach = 0.32 * R0 * (0.7 + 0.6 * puff)
       aura = auraK * Math.exp(-Math.pow(Math.max(r - R0, 0) / reach, 1.6)) * (0.6 + 0.4 * puff)
     }
@@ -121,13 +137,13 @@ export function frame(t, G, out, dive = 1, ox = 0, oy = 0) { // dive > 1 moves i
     // the far side of the disk, bent up and over the shadow
     let halo = 0
     if (haloK > 0 && r < 4.0 * R0) {
-      const top = 0.5 - 0.5 * Math.sin(ang - TILT)
-      const side = Math.pow(Math.abs(Math.cos(ang - TILT)), 10)
+      const top = 0.5 - 0.5 * Math.sin(ang - TL)
+      const side = Math.pow(Math.abs(Math.cos(ang - TL)), 10)
       const outR = Math.max(r - 1.1 * R0, 0)
       const band = Math.exp(-((outR / (0.2 * R0 + 0.24 * R0 * top + 0.45 * R0 * side)) ** 2))
         * Math.exp(-((Math.min(r - 1.1 * R0, 0) / (0.2 * R0)) ** 2))
       const hrho = (1 - side) * (R_IN + Math.max(r - 1.0 * R0, 0) * 2.6) + side * Math.max(r, R_IN)
-      halo = 1.2 * band * gas(ang - TILT, hrho, t, w, pulseK) * (0.5 + 0.8 * top) * (1 - 0.25 * Math.cos(ang - TILT)) * haloK
+      halo = 1.2 * band * gas(ang - TL, hrho, t, w, pulseK) * (0.5 + 0.8 * top) * (1 - 0.25 * Math.cos(ang - TL)) * haloK
     }
 
     // the shock is a thin ring: five widths away it is under 1e-10, so skip the exp
@@ -187,13 +203,33 @@ export function frame(t, G, out, dive = 1, ox = 0, oy = 0) { // dive > 1 moves i
 export const INTRO_END = 13 // seconds: by then the black hole has finished drawing itself
 
 // where the hole is on screen at time t: centre and shadow radius in px, how far
-// the maths' camera has eased in (it does just after the flash), and the disk's tilt
-export function hole(t, W, H, S) {
+// the maths' camera has eased in (it does just after the flash), and the disk's pose.
+// m: how far it has gone toward its resting place B (from rest()), 0..1; it grows by dive
+export function hole(t, W, H, S, m = 0, B = null) {
   const cam = smooth(smooth((t - FLASH + 0.3) / 2.6)), zoom = 1 + 0.28 * cam
-  return { cx: W / 2, cy: H / 2 - 0.02 * cam * S, R: R0 * zoom * S, cam, inc: INC + 0.09 * cam }
+  const h = { cx: W / 2, cy: H / 2 - 0.02 * cam * S, R: R0 * zoom * S, cam, inc: INC + 0.09 * cam, tilt: TILT, m, dive: 1 }
+  if (m > 0) {
+    h.dive = B.k ** m // grows evenly
+    h.R *= h.dive
+    h.cy = lerp(h.cy, B.cy, m)
+    h.inc = lerp(h.inc, REST_INC, m)
+    h.tilt = lerp(TILT, REST_TILT, m)
+  }
+  return h
 }
 
-// the flash's shock front, in screen px: the sky inside it is uncovered
+// Where the hole comes to rest: centred, REST_LIFT shadow radii above the bottom of the
+// short viewport Hs (a phone's toolbar showing); as big as fits with REST_MARGIN to spare
+// at the sides (REST_TIPS_ON of each tip on screen) and above the arc, but at most
+// REST_ZOOM_MAX times its size when the intro ends. On narrow screens that can be smaller than the intro's.
+export function rest(W, Hs, S) {
+  const R1 = R0 * 1.28 * S, m = REST_MARGIN
+  const R = Math.max(1, Math.min(REST_ZOOM_MAX * R1, (W / 2 - m) / (REST_TIPS_ON * REST_HALF_WIDTH), (Hs - m) / (REST_TOP + REST_LIFT)))
+  return { k: R / R1, R, cy: Hs - REST_LIFT * R }
+}
+
+// the flash's shock front, in screen px: the sky inside it is uncovered. It spreads from
+// where the flash was, so it ignores the hole moving afterwards
 export function reveal(t, W, H, S) {
   if (t <= FLASH) return null
   const h = hole(t, W, H, S), r = (R0 + (t - FLASH) * 0.55) * (1 + 0.28 * h.cam) * S

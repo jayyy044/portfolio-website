@@ -38,7 +38,9 @@ function chooseDistance(W, H, S) {
 function bendTable(D, N) {
   const thSh = shadowAngle(D), data = new Uint8Array(N * 4), acc = (u) => -u + 3 * u * u
   for (let i = 0; i < N; i++) {
-    const s = i / (N - 1), th = thSh + s * s * (Math.PI - thSh)
+    // stop just short of straight behind, where the ray isn't bent: right at PI the first step overshoots and the
+    // ray reads as fallen in (bend 20 rad). Only matters once the hole has moved and the screen reaches past PI from it
+    const s = i / (N - 1), th = Math.min(thSh + s * s * (Math.PI - thSh), Math.PI - 1e-3)
     let u = 1 / D, v = Math.sqrt(1 - 2 / D) / Math.tan(th) / D, phi = 0, dphi = 30
     const h = 0.01
     for (let k = 0; k < 20000; k++) {
@@ -68,7 +70,7 @@ precision highp float;
 #else
 precision mediump float;
 #endif
-uniform sampler2D sky; uniform sampler2D tab; uniform vec2 res; uniform vec2 c; uniform float rs; uniform float thSh; uniform float f; uniform mat3 M; uniform float N;
+uniform sampler2D sky; uniform sampler2D tab; uniform vec2 res; uniform vec2 c; uniform float rs; uniform float thSh; uniform float f; uniform vec2 cb; uniform float f0; uniform vec3 hd; uniform mat3 M; uniform float N;
 const float PI = 3.14159265;
 float bend(float th) {
   float s = sqrt(clamp((th - thSh) / (PI - thSh), 0.0, 1.0));
@@ -76,11 +78,15 @@ float bend(float th) {
   return (t.r * 255.0 * 256.0 + t.g * 255.0) / 65535.0 * 20.0;
 }
 vec3 shade(vec2 p) {
-  vec2 d = p - c; float dl = length(d), th = dl / f;            // equal-angle lens
+  float dl = length(p - c), th = dl / f;                        // how hard a ray bends depends on its angle from the hole (equal-angle lens)
   if (th <= thSh) return vec3(0.0);                             // the ray falls in: the shadow
-  float dphi = PI - th + bend(th);                              // how far round the hole the ray swings before escaping
-  vec2 e2 = d / max(dl, 1e-4);
-  vec3 s = M * (cos(dphi) * vec3(0.0, 0.0, 1.0) + sin(dphi) * vec3(e2.x, -e2.y, 0.0));
+  vec2 db = p - cb; float lb = length(db), a = lb / f0; vec2 eb = db / max(lb, 1e-4);
+  vec3 v = vec3(sin(a) * eb.x, -sin(a) * eb.y, -cos(a));        // the unbent ray, in the sky's own frame (pinned where the intro left it)
+  float tv = acos(clamp(dot(v, hd), -1.0, 1.0));
+  vec3 e = v - cos(tv) * hd; float le = length(e); e = le > 1e-5 ? e / le : vec3(1.0, 0.0, 0.0);
+  float k = tv - bend(th) * f / f0;                             // swung round toward the hole (past it, for the ring images), as hard
+                                                                // for its size as before it moved: f / f0 is how much it has grown
+  vec3 s = M * (cos(k) * hd + sin(k) * e);
   float lon = atan(s.x, -s.z), lat = asin(clamp(s.y, -1.0, 1.0));
   return texture2D(sky, vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI)).rgb;
 }
@@ -169,7 +175,7 @@ export function createLensing() {
       g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.NEAREST)
       g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE)
       g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE)
-      u = Object.fromEntries(['sky', 'tab', 'res', 'c', 'rs', 'thSh', 'f', 'M', 'N'].map((n) => [n, g.getUniformLocation(pr, n)]))
+      u = Object.fromEntries(['sky', 'tab', 'res', 'c', 'rs', 'thSh', 'f', 'cb', 'f0', 'hd', 'M', 'N'].map((n) => [n, g.getUniformLocation(pr, n)]))
       g.uniform1i(u.sky, 0)
       g.uniform1i(u.tab, 1)
       g.uniform1f(u.N, TABLE)
@@ -195,8 +201,10 @@ export function createLensing() {
       dpr = d
       fitDistance()
     },
-    // draws the lensed sky for hole h (from blackhole.js's hole()) at clock t; false if it can't
-    draw(h, t) {
+    // draws the lensed sky for hole h (from blackhole.js's hole()) at clock t; false if it can't.
+    // sky: the hole as it was before it moved (hole() with m = 0). The sky stays pinned
+    // to that, so only the hole and its bending move across it as it settles
+    draw(h, sky, t) {
       if (!gl) return false
       const scale = Math.min(dpr, RES), cw = Math.round(W * scale), ch = Math.round(H * scale)
       if (cv.width !== cw || cv.height !== ch) {
@@ -204,7 +212,7 @@ export function createLensing() {
         cv.height = ch
       }
       gl.viewport(0, 0, cw, ch)
-      const yaw = YAW + SPIN * (t - INTRO_END), pitch = PITCH + PITCH_FROM_TILT * h.inc
+      const yaw = YAW + SPIN * (t - INTRO_END), pitch = PITCH + PITCH_FROM_TILT * sky.inc // the sky's pose, so it doesn't tip as the disk levels
       const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch)
       gl.uniformMatrix3fv(u.M, false, new Float32Array([cy, sp * sy, -cp * sy, 0, cp, sp, sy, -sp * cy, cp * cy]))
       const rs = h.R * 0.98 * scale
@@ -213,6 +221,10 @@ export function createLensing() {
       gl.uniform1f(u.rs, rs)
       gl.uniform1f(u.thSh, thSh)
       gl.uniform1f(u.f, rs / thSh)
+      const f0 = (sky.R * 0.98 * scale) / thSh, dx = (h.cx - sky.cx) * scale, dy = (h.cy - sky.cy) * scale, l = Math.hypot(dx, dy), a = l / f0
+      gl.uniform2f(u.cb, sky.cx * scale, sky.cy * scale)
+      gl.uniform1f(u.f0, f0)
+      gl.uniform3f(u.hd, l > 1e-4 ? (Math.sin(a) * dx) / l : 0, l > 1e-4 ? (-Math.sin(a) * dy) / l : 0, -Math.cos(a)) // the hole's direction in the sky's frame
       gl.drawArrays(gl.TRIANGLES, 0, 3)
       return true
     },
