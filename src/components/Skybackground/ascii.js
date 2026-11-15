@@ -128,15 +128,17 @@ export function drawArt(A, t, dt, h, moved = false) {
 // On top of the sky: the mask hides what the hole covers, the backing dims the
 // sky around the gas (fading in after the flash, as the sky appears), then the
 // letters and glow add light. lensed: the sky is the ray-traced one, which draws
-// its own shadow, so the mask fades out once that sky is in.
-export function composeArt(ctx, A, t, lensed) {
+// its own shadow, so the mask fades out once that sky is in. under: draws a layer
+// between the backing and the letters (the name), so the gas sits in front of it.
+export function composeArt(ctx, A, t, lensed, under) {
   ctx.imageSmoothingEnabled = true
   ctx.globalAlpha = lensed ? 1 - smooth((t - FLASH - 1) / 3) : 1
   if (ctx.globalAlpha > 0.001) ctx.drawImage(A.mask, 0, 0, A.cols * A.CW, A.rows * A.CH)
   ctx.globalAlpha = BACKING * smooth((t - FLASH - 0.5) / 2)
   if (ctx.globalAlpha > 0.001) ctx.drawImage(A.bk, 0, 0, A.W, A.H)
-  ctx.globalCompositeOperation = 'lighter'
   ctx.globalAlpha = 1
+  under?.()
+  ctx.globalCompositeOperation = 'lighter'
   ctx.drawImage(A.art, 0, 0, A.W, A.H)
   for (const g of A.glows) {
     ctx.globalAlpha = g.amt

@@ -4,12 +4,14 @@ import { createNebula, drawNebula } from './nebula'
 import { reveal, hole, rest, smooth, INTRO_END } from './blackhole'
 import { createLensing } from './lensing'
 import { createArt, drawArt, composeArt } from './ascii'
+import { createName, drawName, nameMoving, REVEAL_END } from './name'
 import './Skybackground.css'
 
-const FPS = 30 // redraws a second: the letters and the sky's motion are both slow enough; scrolling and the shock front redraw every frame
+const FPS = 30 // redraws a second: the letters and the sky's motion are both slow enough; scrolling, the shock front and the name coming out redraw every frame
 const SPEED = 1.75 // how fast the clock runs: 2 = twice as fast, 0.5 = half
 const SWAY_X = 14, SWAY_Y = 9 // how far the whole sky sways, in px
-const MOVE_ROOM = 1 // screens of scroll, after the intro, that take the hole down to its resting place; also the page's scroll room
+const MOVE_ROOM = 1 // screens of scroll, after the intro, that take the hole down to its resting place
+const ROOM = Math.max(MOVE_ROOM, REVEAL_END) // the page's scroll room, in screens: the hole settles, then the name comes out of it (name.js)
 const SCROLL_EASE = 8 // how quickly the hole catches up with the scroll, per second: higher follows tighter, lower glides more
 const SKIP_INTRO = true // TEMPORARY, for tuning: start at the end of the intro, hole already where the scroll puts it. Set false to get the intro back
 
@@ -37,7 +39,7 @@ export default function Skybackground() {
     const root = document.documentElement
     let locked = t < INTRO_END
     root.classList.toggle('locked', locked)
-    let W = 0, H = 0, dpr = 1, S, nebula, stars, art, raf, dprQuery, buildTimer
+    let W = 0, H = 0, dpr = 1, S, nebula, stars, art, line, raf, dprQuery, buildTimer
     let last = 0, acc = 0, lastScroll = 0, flatReady = false
     let B, sS = 0 // the hole's resting place (rest()); the scroll it follows, eased, in screens
 
@@ -52,7 +54,8 @@ export default function Skybackground() {
       dpr = pw / w // the real scale, so whole device pixels really are whole
       S = Math.min(H, W / 1.35) // one unit of the black hole's maths, in px
       B = rest(W, Math.min(H, probe.clientHeight || H), S) // it rests inside the short viewport, so a toolbar never hides it
-      if (first && t >= INTRO_END) sS = Math.min(Math.max(window.scrollY / H, 0), MOVE_ROOM) // no intro: start where the scroll is, no glide
+      if (first && t >= INTRO_END) sS = Math.min(Math.max(window.scrollY / H, 0), ROOM) // no intro: start where the scroll is, no glide
+      line = createName(W, H, dpr, B)
       canvas.width = pw
       canvas.height = ph
       flatReady = false // the fallback sky is only built if it's needed
@@ -108,7 +111,8 @@ export default function Skybackground() {
           ctx.fillRect(0, 0, W, H)
         }
       }
-      composeArt(ctx, art, t, lensed)
+      // the name goes under the gas; reduced motion: no sweep over it once landed
+      composeArt(ctx, art, t, lensed, () => drawName(ctx, line, h, sS, reduced ? null : t))
     }
 
     // the fallback sky: gradient, faint stars, nebula and twinkling stars, swaying slowly
@@ -131,10 +135,11 @@ export default function Skybackground() {
       }
       acc += dt // real time: FPS redraws a real second whatever the speed
       const scroll = window.scrollY
-      // after the intro the hole follows the scroll, eased (at the same pace whatever the frame rate) so it glides
-      const target = t >= INTRO_END ? Math.min(Math.max(scroll / H, 0), MOVE_ROOM) : 0
-      const moving = sS !== target
-      if (moving) sS = Math.abs(target - sS) < 2e-4 ? target : sS + (target - sS) * (1 - Math.exp(-dt * SCROLL_EASE))
+      // after the intro the hole, then the name, follow the scroll, eased (at the same pace whatever the frame rate) so they glide
+      const target = t >= INTRO_END ? Math.min(Math.max(scroll / H, 0), ROOM) : 0
+      const prev = sS, was = Math.min(prev, MOVE_ROOM)
+      if (sS !== target) sS = Math.abs(target - sS) < 2e-4 ? target : sS + (target - sS) * (1 - Math.exp(-dt * SCROLL_EASE))
+      const moving = Math.min(sS, MOVE_ROOM) !== was // the hole only moves over the first MOVE_ROOM screens
       const h = holeAt(t), rv = reveal(t, W, H, S)
       // the letters update FPS times a second, and on every frame while the hole is moving
       const update = moving || acc >= 1 / FPS - 0.004
@@ -142,8 +147,9 @@ export default function Skybackground() {
         drawArt(art, t, acc, h, moving)
         acc = 0
       }
-      // the shock front is the other fast thing: while it's crossing the screen, redraw every frame
-      if (update || scroll !== lastScroll || (rv && !rv.full)) {
+      // the shock front and the name coming out are the other fast things: while they move, redraw every frame
+      // (a name parked mid-reveal only scrambles, and the landed one's sweep is slow enough: the FPS tick covers both)
+      if (update || scroll !== lastScroll || (rv && !rv.full) || (sS !== prev && nameMoving(sS))) {
         lastScroll = scroll
         draw(rv, scroll, h)
       }
@@ -199,7 +205,10 @@ export default function Skybackground() {
       watchDpr()
     }
 
-    document.fonts?.load('500 12px "JetBrains Mono"') // the letters use it; nothing else on the page asks for it yet
+    // the letters and the name use it; nothing else on the page asks for it yet. The name's
+    // layout measures it, so lay that out again once it's in (or has failed to load)
+    const relayout = () => W && (line = createName(W, H, dpr, B))
+    document.fonts?.load('500 12px "JetBrains Mono"').then(relayout, relayout)
     observe()
     watchDpr()
     buildTimer = setTimeout(() => lens.init(), 500) // build the lensed sky while only the ring is drawing
@@ -217,8 +226,9 @@ export default function Skybackground() {
     <>
       <canvas ref={canvasRef} className="sky" aria-hidden="true" />
       <div ref={probeRef} className="sky-probe" />
-      {/* room to scroll the hole down into place; the content sections will take this over */}
-      <div style={{ height: `${(1 + MOVE_ROOM) * 100}lvh` }} aria-hidden="true" />
+      {/* room to scroll the hole down into place and the name out of it; the content sections will take this over.
+          2px spare: the browser rounds the scroll, and a fraction of a px short of ROOM the name never quite lands */}
+      <div style={{ height: `calc(${(1 + ROOM) * 100}lvh + 2px)` }} aria-hidden="true" />
     </>
   )
 }
