@@ -5,13 +5,14 @@ import { reveal, hole, rest, smooth, INTRO_END } from './blackhole'
 import { createLensing } from './lensing'
 import { createArt, drawArt, composeArt } from './ascii'
 import { createName, drawName, nameMoving, REVEAL_END } from './name'
+import { createAsteroid, drawAsteroidUnder, drawAsteroidOver, impactOf, asteroidBusy, STORY_END } from './asteroid'
 import './Skybackground.css'
 
 const FPS = 30 // redraws a second: the letters and the sky's motion are both slow enough; scrolling, the shock front and the name coming out redraw every frame
 const SPEED = 1.75 // how fast the clock runs: 2 = twice as fast, 0.5 = half
 const SWAY_X = 14, SWAY_Y = 9 // how far the whole sky sways, in px
 const MOVE_ROOM = 1 // screens of scroll, after the intro, that take the hole down to its resting place
-const ROOM = Math.max(MOVE_ROOM, REVEAL_END) // the page's scroll room, in screens: the hole settles, then the name comes out of it (name.js)
+const ROOM = Math.max(MOVE_ROOM, REVEAL_END, STORY_END) // the page's scroll room, in screens: the hole settles, the name comes out of it (name.js), then the asteroid smashes it and spirals into the hole (asteroid.js)
 const SCROLL_EASE = 8 // how quickly the hole catches up with the scroll, per second: higher follows tighter, lower glides more
 const SKIP_INTRO = true // TEMPORARY, for tuning: start at the end of the intro, hole already where the scroll puts it. Set false to get the intro back
 
@@ -39,7 +40,7 @@ export default function Skybackground() {
     const root = document.documentElement
     let locked = t < INTRO_END
     root.classList.toggle('locked', locked)
-    let W = 0, H = 0, dpr = 1, S, nebula, stars, art, line, raf, dprQuery, buildTimer
+    let W = 0, H = 0, dpr = 1, S, nebula, stars, art, line, ast, raf, dprQuery, buildTimer
     let last = 0, acc = 0, lastScroll = 0, flatReady = false
     let B, sS = 0 // the hole's resting place (rest()); the scroll it follows, eased, in screens
 
@@ -60,6 +61,7 @@ export default function Skybackground() {
       canvas.height = ph
       flatReady = false // the fallback sky is only built if it's needed
       art = createArt(W, H, dpr, S)
+      ast = createAsteroid(W, H, dpr, B, line, art)
       lens.fit(W, H, S, dpr)
       // updates up front so the letters' trail is already there; one is enough mid-resize
       for (let i = first ? 0 : 3; i < 4; i++) {
@@ -111,8 +113,13 @@ export default function Skybackground() {
           ctx.fillRect(0, 0, W, H)
         }
       }
-      // the name goes under the gas; reduced motion: no sweep over it once landed
-      composeArt(ctx, art, t, lensed, () => drawName(ctx, line, h, sS, reduced ? null : t))
+      // the name goes under the gas, and whatever of the asteroid is behind the hole; the rest of the asteroid over it.
+      // reduced motion: no sweep over the landed name, and the rock's tumble, its fire and its gas hold still
+      const ta = reduced ? INTRO_END : t
+      composeArt(ctx, art, t, lensed, () => {
+        drawName(ctx, line, h, sS, reduced ? null : t, impactOf(ast, sS))
+        drawAsteroidUnder(ctx, ast, h, sS, ta)
+      }, () => drawAsteroidOver(ctx, ast, h, sS, ta))
     }
 
     // the fallback sky: gradient, faint stars, nebula and twinkling stars, swaying slowly
@@ -147,9 +154,12 @@ export default function Skybackground() {
         drawArt(art, t, acc, h, moving)
         acc = 0
       }
-      // the shock front and the name coming out are the other fast things: while they move, redraw every frame
-      // (a name parked mid-reveal only scrambles, and the landed one's sweep is slow enough: the FPS tick covers both)
-      if (update || scroll !== lastScroll || (rv && !rv.full) || (sS !== prev && nameMoving(sS))) {
+      // the shock front, the name coming out and the asteroid are the other fast things: while they move, redraw
+      // every frame (a name parked mid-reveal only scrambles, and the landed one's sweep is slow enough: the FPS
+      // tick covers both; the asteroid tumbles and burns on its own, so it redraws every frame while it is on screen; once it has gone
+      // into the hole the page is back to the FPS tick)
+      const busy = asteroidBusy(sS)
+      if (update || scroll !== lastScroll || (rv && !rv.full) || (sS !== prev && (nameMoving(sS) || busy)) || (busy && !reduced)) {
         lastScroll = scroll
         draw(rv, scroll, h)
       }
@@ -207,7 +217,11 @@ export default function Skybackground() {
 
     // the letters and the name use it; nothing else on the page asks for it yet. The name's
     // layout measures it, so lay that out again once it's in (or has failed to load)
-    const relayout = () => W && (line = createName(W, H, dpr, B))
+    const relayout = () => {
+      if (!W) return
+      line = createName(W, H, dpr, B)
+      ast = createAsteroid(W, H, dpr, B, line, art)
+    }
     document.fonts?.load('500 12px "JetBrains Mono"').then(relayout, relayout)
     observe()
     watchDpr()
@@ -226,7 +240,7 @@ export default function Skybackground() {
     <>
       <canvas ref={canvasRef} className="sky" aria-hidden="true" />
       <div ref={probeRef} className="sky-probe" />
-      {/* room to scroll the hole down into place and the name out of it; the content sections will take this over.
+      {/* room to scroll the hole down into place, the name out of it and the asteroid into it; the content sections will take this over.
           2px spare: the browser rounds the scroll, and a fraction of a px short of ROOM the name never quite lands */}
       <div style={{ height: `calc(${(1 + ROOM) * 100}lvh + 2px)` }} aria-hidden="true" />
     </>

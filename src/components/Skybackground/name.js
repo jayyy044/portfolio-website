@@ -12,7 +12,7 @@ import { smooth } from './blackhole'
 const LINE = ['hi my name', 'is maanas'] // the two halves: the first pours out of the hole's left edge, the second out of its right
 const NAME = 'maanas' // the part of the line drawn in NAME_RGB
 export const REVEAL_START = 0.85 // screens of scroll where the streams start (the hole has nearly settled by then)
-export const REVEAL_END = 2.1 // and where the line has landed; the page's scroll room ends here too
+export const REVEAL_END = 2.1 // and where the line has landed
 const FONT_MIN = 18, FONT_MAX = 64 // the line's font size, px; in between it follows the screen's width and height
 const TEXT_RGB = [236, 232, 240] // the line
 const NAME_RGB = [255, 177, 90] // the name
@@ -25,7 +25,7 @@ const GLOW_SWELL = 0.25 // how much more bloom there is mid-reveal
 const PARTICLES = 26, PARTICLES_PHONE = 14 // glyphs streaming into each letter; phones are screens under PHONE px wide
 const PHONE = 700
 const LAG = 0.68 // how far into the reveal the innermost letters start (the outer ends start first): 0 = all at once
-const SCRAMBLE = ':;+=!xzcv*rtaeo0&%{}#@8B$QM' // what the streams are made of
+export const SCRAMBLE = ':;+=!xzcv*rtaeo0&%{}#@8B$QM' // what the streams are made of (and the glyphs torn off the asteroid, asteroid.js)
 const SCRAMBLE_RATE = 14 // how often each stream glyph changes, a second
 // the sweep over the landed line; times are on the intro clock, so SPEED scales them (at 1.75, 4.2 is about 2.4 s)
 const SWEEP_EVERY = 4.2 // from one sweep to the next
@@ -35,10 +35,34 @@ const SWEEP_SETTLE = 0.75 // then how long it takes to be lit again and cool
 const SWEEP_FROM = 0.42 // where in the landing it restarts: 0 = from the first dim tick, 0.5 = straight to the hot glyph
 const SWEEP_RATE = 22 // how often a scrambled letter changes, a second
 const SWEEP_RGB = [255, 222, 186], SWEEP_NAME_RGB = [255, 196, 120] // a scrambled letter (the line's, the name's)
+// the asteroid hitting the landed line (asteroid.js says when its fire first reaches each letter): each letter breaks as
+// the fire reaches it, or sooner as the crack running out along the line from the first one does
+const SHARDS = 4, SHARDS_PHONE = 3 // hot glyph chips (* + ' .) each letter throws off as it bursts, besides its own pieces
+const CHIP_SIZE = 0.3 // how big the chips are, in font sizes
+const BLAST_NEAR = 300 // how far the pieces of the letters the rock goes through are flung, px (they coast to a stop)
+const BLAST_FAR = 36 // and the farthest letters' pieces: these mostly crack and fall
+const BLAST_REACH = 3.5 // how far along the line from where the rock goes through the blast stays strong, in font sizes
+const SHOCK = 0.14 // screens of scroll the crack takes to run from the first letter the fire touches to the far ends of the line
+const DRAG = 0.09 // screens of scroll for the pieces to lose most of their speed: higher = they coast longer
+const SAG = 700 // how fast the pieces sag as they slow, px per screen of scroll squared (the gently cracked ones most)
+const TUMBLE = 1.6 // how many turns the nearest pieces spin through
+const SHARD_LIFE = 0.6 // screens of scroll from a letter breaking to its pieces faded out
+const CRACK = 0.025 // screens of scroll a letter glows hot and shivers before it breaks
+const PIECES_NEAR = [2, 3], PIECES_MID = [2, 2], PIECES_FAR = [1, 2] // what each letter is cut into, columns x rows: the ones the rock goes through, the ones near them, the rest
+const ALONG = 1.1 // how much of a hit letter's push is along the way the rock was going (the rest is away from where it went through)
+const BURST = 0.6 // how hard a hit letter's pieces fly apart from each other
+const COOL = 0.12 // screens of scroll for a piece to cool from white hot most of the way to an ember
+const WHITE_RGB = [255, 246, 232], EMBER_RGB = [235, 92, 34] // a piece at its hottest, and cooled to an ember (the farther letters cool back to their own colour)
+const WAKE = 0.3 // the share of a hit letter's pieces caught in the rock's wake and dragged after it a little way
+const WAKE_PULL = 0.7 // how far they are dragged: 1 = as far as the rock goes
+const WAKE_DRAG = 0.18 // screens of scroll for them to fall out of its wake
+const IMPACT_FLASH = 0.05 // screens of scroll the flash where the fire first touches the line lasts
+const IMPACT_FLASH_SIZE = 5 // how far it spreads, in font sizes
+const IMPACT_FLASH_RGB = [214, 232, 255] // its outer colour (white at its heart)
 
 const MONO = '"JetBrains Mono", Menlo, Consolas, monospace'
 const RAMP = ['.', ':', '+', '*', '#'] // the ticks a letter steps through before it lands
-const GHOST = [1, 0.5, 0.27, 0.12], GHOST_GAP = 0.026 // a stream glyph's trail: how bright each copy is, and how far behind
+export const GHOST = [1, 0.5, 0.27, 0.12], GHOST_GAP = 0.026 // a stream glyph's trail: how bright each copy is, and how far behind
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x)
 const ease = (x) => 1 - (1 - x) * (1 - x)
 const rgb = (c) => `rgb(${c})`
@@ -50,7 +74,7 @@ export function nameMoving(s) {
   return p > 0.0005 && p < 0.9995 // the same ends drawName uses
 }
 
-function hash(a, b) {
+export function hash(a, b) {
   let q = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263)
   q = Math.imul(q ^ (q >>> 13), 1274126177)
   return ((q ^ (q >>> 16)) >>> 0) / 4294967296
@@ -78,7 +102,7 @@ export function createName(W, H, dpr, B) {
   const ty = Math.round(Math.max(fs * 1.4, top * 0.5) * dpr) / dpr
   const at = text.indexOf(NAME), nameAt = at < 0 ? text.length : at, split = LINE[0].length
   // x is the letter's left edge, y its centre line
-  const letters = [...text].map((c, i) => ({ x: x0 + x.measureText(text.slice(0, i)).width, w: x.measureText(c).width, y: ty,
+  const letters = [...text].map((c, i) => ({ c, x: x0 + x.measureText(text.slice(0, i)).width, w: x.measureText(c).width, y: ty,
     half: i < split ? 0 : i === split ? -1 : 1, name: i >= nameAt, space: c === ' ' }))
 
   // the finished line, drawn once at device resolution; line.x, line.y: where it goes, in device px
@@ -125,7 +149,7 @@ export function createName(W, H, dpr, B) {
       G.lum[g] = 0.7 + 0.3 * hash(k * 5, i * 11)
     }
   })
-  return { W, H, dpr, fs, font, cv, x, glow, gx, line, cells, G, fsG: Math.max(8, fs * 0.36), x0, wTot }
+  return { W, H, dpr, fs, font, cv, x, glow, gx, line, cells, G, fsG: Math.max(8, fs * 0.36), x0, wTot, ty }
 }
 
 // one letter, lit the way the echo lights it, u 0..1: a few dim ticks of . : + * then #, each
@@ -183,11 +207,163 @@ function sweepAt(N, c, t) {
   return d < 0 || d > SWEEP_SCRAMBLE + SWEEP_SETTLE ? null : d
 }
 
+// the stream glyphs gathered in buckets (key: name, heat 0..5, alpha 0..9 -> x, y, glyph, ...), drawn in one go
+function drawGlyphs(x, N, buckets) {
+  x.setTransform(N.dpr, 0, 0, N.dpr, 0, 0)
+  x.globalCompositeOperation = 'lighter'
+  x.font = `500 ${N.fsG.toFixed(1)}px ${MONO}`
+  x.textAlign = 'center'
+  x.textBaseline = 'middle'
+  for (const [key, arr] of buckets) {
+    const ai = key % 10, k = (Math.floor(key / 10) % 6) / 5, base = Math.floor(key / 60) ? NAME_RGB : TEXT_RGB
+    x.fillStyle = `rgba(${base.map((v, i) => Math.round(v + (STREAM_HOT_RGB[i] - v) * k))},${(ai / 10).toFixed(2)})`
+    for (let i = 0; i < arr.length; i += 3) x.fillText(SCRAMBLE[arr[i + 2]], arr[i], arr[i + 1])
+  }
+}
+
+// The landed line shattered by the asteroid. impact: { x, y (css px: where the rock's centre crosses the line), dx, dy
+// (the way it was going), hits (when its fire first reaches each letter, Infinity if never), s (the first of those),
+// rock(s) (where the rock is at scroll s) }. Each letter heats up and shivers for a moment, then bursts into pieces of
+// itself, white hot where the rock went through: those fly mostly the way the rock was going, apart from each other,
+// tumbling, some caught in its wake, cooling to embers and fading; the farther letters crack into a couple of pieces
+// that are pushed away and sag. Hot glyph chips fly off, and a flash marks the first contact. Nothing falls into the
+// hole. A pure function of the scroll: scrolling back puts the line together again.
+function tint(src, c) {
+  const [cv, cx] = canvas(src.width, src.height)
+  cx.drawImage(src, 0, 0)
+  cx.globalCompositeOperation = 'source-in'
+  cx.fillStyle = rgb(c)
+  cx.fillRect(0, 0, src.width, src.height)
+  return cv
+}
+// n + 1 cut positions from lo to hi, the inner ones jittered
+const cuts = (n, seed, lo, hi) => Array.from({ length: n + 1 }, (_, j) => lo + ((hi - lo) * (j && j < n ? j + (hash(seed, j) - 0.5) * 0.5 : j)) / n)
+// when each letter breaks, how hard it was hit, and its pieces and chips; worked out once per layout and impact
+function shatterAt(N, im) {
+  if (N.sh?.im === im) return N.sh
+  const { cells, fs, dpr } = N, nChips = N.W < PHONE ? SHARDS_PHONE : SHARDS
+  let first = Infinity, fi = -1
+  im.hits.forEach((v, i) => { if (v < first) { first = v; fi = i } })
+  if (fi < 0) first = im.s
+  const ox = fi < 0 ? im.x : cells[fi].cxp, oy = fi < 0 ? im.y : cells[fi].l.y // the first contact
+  const d = cells.map((c) => Math.abs(c.cxp - ox)), dMax = Math.max(1, ...d)
+  const at = cells.map((c, i) => Math.min(im.hits[i], first + SHOCK * Math.pow(d[i] / dMax, 0.85)))
+  // a push from (hx, hy): away from where the rock went through, along its way, and out from the letter's middle
+  const push = (c, k, hx, hy, g, spread) => {
+    let ax = hx - im.x, ay = hy - im.y
+    const al = Math.hypot(ax, ay) || 1, bx = hx - c.cxp, by = hy - c.l.y, bl = Math.hypot(bx, by) || 1
+    ax = ax / al + ALONG * k * im.dx + (BURST * k * bx) / bl
+    ay = ay / al + ALONG * k * im.dy + (BURST * k * by) / bl
+    const sp = (hash(g, 11) - 0.5) * spread, ca = Math.cos(sp), sa = Math.sin(sp), ux = ax * ca - ay * sa, uy = ax * sa + ay * ca, ul = Math.hypot(ux, uy) || 1
+    return [ux / ul, uy / ul]
+  }
+  const L = cells.map((c, i) => {
+    c.white ??= tint(c.cool, WHITE_RGB)
+    c.ember ??= tint(c.cool, EMBER_RGB)
+    const k = Math.exp(-(((c.cxp - im.x) / (BLAST_REACH * fs)) ** 2)), [nc, nr] = k > 0.55 ? PIECES_NEAR : k > 0.2 ? PIECES_MID : PIECES_FAR
+    const sx0 = c.bx - c.x0, ch = c.cool.height, xs = cuts(nc, i * 13 + 1, 0, 1), ys = cuts(nr, i * 13 + 2, 0.08, 0.94), pieces = [], chips = []
+    for (let a = 0; a < nc; a++) for (let b = 0; b < nr; b++) {
+      const sx = Math.round(sx0 + xs[a] * c.bw), sw = Math.round(sx0 + xs[a + 1] * c.bw) - sx, sy = Math.round(ys[b] * ch), sh = Math.round(ys[b + 1] * ch) - sy
+      if (sw < 1 || sh < 1) continue
+      const g = i * 16 + a * 4 + b, hx = (c.x0 + sx + sw / 2) / dpr, hy = (c.y0 + sy + sh / 2) / dpr, [ux, uy] = push(c, k, hx, hy, g, 0.9)
+      const wake = k > 0.5 && hash(g, 23) < WAKE
+      pieces.push({ sx, sy, sw, sh, hx, hy, ux, uy, wake, D: (BLAST_FAR + (BLAST_NEAR - BLAST_FAR) * k) * (0.5 + 0.9 * hash(g, 13)),
+        spin: (hash(g, 19) - 0.5) * 2 * TUMBLE * 2 * Math.PI * (0.15 + k), life: SHARD_LIFE * (0.6 + 0.4 * hash(g, 3) + 0.2 * k) * (wake ? 0.7 : 1) })
+    }
+    for (let j = 0; j < nChips; j++) {
+      const g = i * 16 + 12 + j, hx = c.cxp + (hash(g, 5) - 0.5) * 0.8 * c.l.w, hy = c.l.y + (hash(g, 7) - 0.5) * 0.7 * fs, [ux, uy] = push(c, k, hx, hy, g, 1.6)
+      chips.push({ hx, hy, ux, uy, D: (BLAST_FAR + (BLAST_NEAR - BLAST_FAR) * k) * (0.8 + hash(g, 13)), life: SHARD_LIFE * 0.5 * (0.6 + 0.4 * hash(g, 3)) })
+    }
+    const [rx, ry] = im.rock(at[i]) // the rock as this letter breaks, for its wake
+    return { k, near: k > 0.35, h0: Math.min(1, 0.3 + 0.75 * k), pieces, chips, rx, ry }
+  })
+  N.sh = { im, at, L, first, ox, oy, last: Math.max(...at) }
+  return N.sh
+}
+// a piece of letter c (the device-px rect sx, sy, sw, sh of its cell) at heat h (0 = cooled, 1 = white hot), alpha a,
+// centred at X, Y (css px), turned by rot; near: it cools to an ember, else back to its own colour
+function drawPiece(x, N, c, near, h, a, sx, sy, sw, sh, X, Y, rot) {
+  if (a < 0.01) return
+  h = clamp01(h)
+  const hi = h >= 0.5, lo = hi ? c.hot : near ? c.ember : c.cool, up = hi ? c.white : c.hot, w = hi ? (h - 0.5) / 0.5 : h / 0.5
+  const cr = Math.cos(rot), sr = Math.sin(rot)
+  x.setTransform(cr, sr, -sr, cr, X * N.dpr, Y * N.dpr)
+  if (w < 0.99) {
+    x.globalAlpha = a * (1 - w)
+    x.drawImage(lo, sx, sy, sw, sh, -sw / 2, -sh / 2, sw, sh)
+  }
+  if (w > 0.01) {
+    x.globalAlpha = a * w
+    x.drawImage(up, sx, sy, sw, sh, -sw / 2, -sh / 2, sw, sh)
+  }
+}
+function drawShatter(x, N, im, s) {
+  const { dpr, cells, fs } = N, sh = shatterAt(N, im), GH = [1, 0.32, 0.12]
+  x.textAlign = 'center'
+  x.textBaseline = 'middle'
+  cells.forEach((c, i) => {
+    const age = s - sh.at[i], L = sh.L[i], k = L.k, ch = c.cool.height
+    if (age < -CRACK) return
+    x.setTransform(1, 0, 0, 1, 0, 0)
+    x.globalCompositeOperation = 'source-over'
+    x.clearRect(c.bx, c.y0, c.bw, ch)
+    x.globalCompositeOperation = 'lighter'
+    if (age < 0) { // heating up: it shivers, and goes from its own colour toward white hot
+      const j = (hash(i, Math.floor(s * 400)) - 0.5) * 2 * k
+      drawPiece(x, N, c, false, L.h0 * smooth(1 + age / CRACK), 1, c.bx - c.x0, 0, c.bw, ch, (c.bx + c.bw / 2) / dpr + j, (c.y0 + ch / 2) / dpr, 0)
+      return
+    }
+    const sag = 0.5 * SAG * (1 - 0.7 * k)
+    for (const p of L.pieces) {
+      if (age > p.life) continue
+      const a = 1 - smooth(age / p.life), h = L.h0 * Math.exp(-age / COOL)
+      for (let gh = 0; gh < 3; gh++) { // the piece, and while it flies fast two fading copies behind it
+        const ag = age - gh * 0.008
+        if (gh && (ag <= 0 || age > 2.5 * DRAG)) break
+        const e = 1 - Math.exp(-ag / DRAG)
+        let X = p.hx + p.ux * p.D * e, Y = p.hy + p.uy * p.D * e + sag * ag * ag
+        if (p.wake) { // dragged after the rock, a slowing fraction of the way it has gone since
+          const [wx, wy] = im.rock(sh.at[i] + WAKE_DRAG * (1 - Math.exp(-ag / WAKE_DRAG)))
+          X = p.hx + (wx - L.rx) * WAKE_PULL + p.ux * p.D * e * 0.35
+          Y = p.hy + (wy - L.ry) * WAKE_PULL + p.uy * p.D * e * 0.35 + 0.3 * sag * ag * ag
+        }
+        drawPiece(x, N, c, L.near, h, a * GH[gh], p.sx, p.sy, p.sw, p.sh, X, Y, p.spin * e)
+      }
+    }
+    x.setTransform(dpr, 0, 0, dpr, 0, 0)
+    x.font = `500 ${(fs * CHIP_SIZE).toFixed(1)}px ${MONO}`
+    for (const q of L.chips) {
+      if (age > q.life) continue
+      const e = 1 - Math.exp(-age / (0.6 * DRAG)), h = clamp01(1.1 * L.h0 * Math.exp(-age / (0.7 * COOL))), a = 1 - smooth(age / q.life)
+      x.globalAlpha = 0.8 * a
+      x.fillStyle = rgb(EMBER_RGB.map((v, n) => Math.round(v + (WHITE_RGB[n] - v) * h)))
+      x.fillText(h > 0.75 ? '*' : h > 0.45 ? '+' : h > 0.2 ? "'" : '.', q.hx + q.ux * q.D * e, q.hy + q.uy * q.D * e + 0.5 * SAG * age * age)
+    }
+  })
+  const u = (s - sh.first) / IMPACT_FLASH // the flash where the fire first touched the line
+  if (u >= 0 && u < 1) {
+    x.setTransform(dpr, 0, 0, dpr, 0, 0)
+    x.globalCompositeOperation = 'lighter'
+    x.globalAlpha = 1
+    const R = fs * (0.6 + IMPACT_FLASH_SIZE * Math.sqrt(u)), A = (0.85 * (1 - u) * (1 - u)).toFixed(3)
+    const g = x.createRadialGradient(sh.ox, sh.oy, 0, sh.ox, sh.oy, R)
+    g.addColorStop(0, `rgba(${WHITE_RGB},${A})`)
+    g.addColorStop(0.3, `rgba(${IMPACT_FLASH_RGB},${(A * 0.45).toFixed(3)})`)
+    g.addColorStop(1, `rgba(${IMPACT_FLASH_RGB},0)`)
+    x.fillStyle = g
+    x.fillRect(sh.ox - R, sh.oy - R, 2 * R, 2 * R)
+  }
+  x.globalAlpha = 1
+  x.globalCompositeOperation = 'source-over'
+  x.setTransform(1, 0, 0, 1, 0, 0)
+}
+
 // Draw the line as far as the scroll s (in screens) has brought it, onto ctx (scaled to css px),
-// plus its bloom. h: the hole now (hole() in blackhole.js); t: the clock, for the sweep (null: no sweep)
-export function drawName(ctx, N, h, s, t) {
+// plus its bloom. h: the hole now (hole() in blackhole.js); t: the clock, for the sweep (null: no sweep).
+// impact: the asteroid hitting it (asteroid.js impactOf), or null; the sweep stops once that comes
+export function drawName(ctx, N, h, s, t, impact = null) {
   const p = progress(s)
-  if (p <= 0.0005) return
+  if (p <= 0.0005 || (impact && s > shatterAt(N, impact).last + SHARD_LIFE * 1.2)) return
   const { x, dpr, W, cells, G } = N
   x.setTransform(1, 0, 0, 1, 0, 0)
   x.globalCompositeOperation = 'source-over'
@@ -195,8 +371,9 @@ export function drawName(ctx, N, h, s, t) {
   x.clearRect(0, 0, N.cv.width, N.cv.height)
   if (p >= 0.9995) {
     x.drawImage(N.line.cv, N.line.x, N.line.y) // landed: the finished line, crisp, at native size
+    if (impact) drawShatter(x, N, impact, s)
     // the sweep: each letter it is on has its slot of the line cleared, then scrambles, then lands again
-    if (t != null) cells.forEach((c, i) => {
+    else if (t != null) cells.forEach((c, i) => {
       const d = sweepAt(N, c, t)
       if (d == null) return
       x.setTransform(1, 0, 0, 1, 0, 0)
@@ -214,11 +391,6 @@ export function drawName(ctx, N, h, s, t) {
   } else {
     // 1. the streams: cubic curves from the hole's edge to each particle's home, fading inside the shadow
     const rs = h.R * 0.98, step = Math.floor((performance.now() / 1000) * SCRAMBLE_RATE)
-    x.setTransform(dpr, 0, 0, dpr, 0, 0)
-    x.globalCompositeOperation = 'lighter'
-    x.font = `500 ${N.fsG.toFixed(1)}px ${MONO}`
-    x.textAlign = 'center'
-    x.textBaseline = 'middle'
     const buckets = new Map() // colour and alpha -> the glyphs drawn in it
     for (let g = 0; g < G.n; g++) {
       const c = cells[G.ci[g]], s0 = clamp01((p - LAG * G.a[g]) / (1 - LAG))
@@ -245,11 +417,7 @@ export function drawName(ctx, N, h, s, t) {
         bk.push(X, Y, Math.floor(hash(g * 4 + k, step) * SCRAMBLE.length))
       }
     }
-    for (const [key, arr] of buckets) {
-      const ai = key % 10, k = (Math.floor(key / 10) % 6) / 5, base = Math.floor(key / 60) ? NAME_RGB : TEXT_RGB
-      x.fillStyle = `rgba(${base.map((v, i) => Math.round(v + (STREAM_HOT_RGB[i] - v) * k))},${(ai / 10).toFixed(2)})`
-      for (let i = 0; i < arr.length; i += 3) x.fillText(SCRAMBLE[arr[i + 2]], arr[i], arr[i + 1])
-    }
+    drawGlyphs(x, N, buckets)
 
     // 2. each letter, lit as its stream arrives
     for (const c of cells) {
@@ -259,8 +427,8 @@ export function drawName(ctx, N, h, s, t) {
   }
   ctx.drawImage(N.cv, 0, 0, N.W, N.H)
 
-  // the bloom: a blurred copy at a third of the size, added on; it swells mid-reveal
-  const amt = Math.min(1, GLOW + GLOW_SWELL * Math.sin(Math.PI * p))
+  // the bloom: a blurred copy at a third of the size, added on; it swells mid-reveal and while torn apart
+  const amt = Math.min(1, GLOW + GLOW_SWELL * (impact ? smooth((s - impact.s) / SHOCK) : Math.sin(Math.PI * p)))
   if (amt <= 0) return
   const { glow, gx } = N
   gx.clearRect(0, 0, glow.width, glow.height)

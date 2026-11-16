@@ -1,6 +1,6 @@
 // The black hole's maths, one character cell at a time. Taken from the black hole page's BH module.
 const TAU = Math.PI * 2
-const POOLS = ['1il!;:', 'rtfjcvxz=+', 'aeoun0{}[]<>', '08B$#&%Q'] // dark -> bright
+export const POOLS = ['1il!;:', 'rtfjcvxz=+', 'aeoun0{}[]<>', '08B$#&%Q'] // dark -> bright
 export const CHARS = ' .,:~+*^01|/\\-_#()x' + POOLS.join('')
 const AT = {}
 for (let i = 0; i < CHARS.length; i++) AT[CHARS[i]] = i // later duplicates win, like the dict

@@ -58,7 +58,7 @@ export function createArt(W, H, dpr, S) {
 
 // one colour per (tag, brightness step); key = tag * 512 + step
 const colorCache = new Map()
-function colorOf(key) {
+export function colorOf(key) {
   let s = colorCache.get(key)
   if (!s) {
     const c = TAG_COLOR[key >> 9], f = (key & 511) / 300
@@ -129,8 +129,9 @@ export function drawArt(A, t, dt, h, moved = false) {
 // sky around the gas (fading in after the flash, as the sky appears), then the
 // letters and glow add light. lensed: the sky is the ray-traced one, which draws
 // its own shadow, so the mask fades out once that sky is in. under: draws a layer
-// between the backing and the letters (the name), so the gas sits in front of it.
-export function composeArt(ctx, A, t, lensed, under) {
+// between the backing and the letters (the name), so the gas sits in front of it;
+// over: one on top of everything (the asteroid).
+export function composeArt(ctx, A, t, lensed, under, over) {
   ctx.imageSmoothingEnabled = true
   ctx.globalAlpha = lensed ? 1 - smooth((t - FLASH - 1) / 3) : 1
   if (ctx.globalAlpha > 0.001) ctx.drawImage(A.mask, 0, 0, A.cols * A.CW, A.rows * A.CH)
@@ -146,4 +147,5 @@ export function composeArt(ctx, A, t, lensed, under) {
   }
   ctx.globalAlpha = 1
   ctx.globalCompositeOperation = 'source-over'
+  over?.()
 }
