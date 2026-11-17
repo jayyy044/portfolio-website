@@ -19,7 +19,7 @@ export const ENTER = 2.4 // it comes in at the top of the screen
 const HIT = 2.68 // its centre is HIT_DEPTH short of the name line (its fire has reached the line just before)
 const CAPTURE = 3.6 // from the hit to here its speed eases from its speed in to its speed round the loops
 const TEAR = 3.4 // the hole's tide starts to stretch it and tear glyphs off it
-const GONE = 5.9 // the last of the rock goes into the shadow
+export const GONE = 5.9 // the last of the rock goes into the shadow
 const END = GONE + 0.12 // and the last glyphs torn off it
 export const STORY_END = END + 0.1 // the page's scroll room ends, on a still frame of the hole
 const FADE_IN = 0.06 // screens of scroll over which its glow fades in as it comes on screen
@@ -79,13 +79,23 @@ const c01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x)
 const sst = (a, b, x) => { const u = c01((x - a) / (b - a)); return u * u * (3 - 2 * u) }
 const smoother = (x) => { x = c01(x); return x * x * x * (x * (6 * x - 15) + 10) } // no jump in the curvature at either end
 const NZ = valueNoise(9137)
+// The camera (about.js cameraAt): everything here is worked out where it is in the scene, then seen through it, css px
+// on screen = k * scene + ox, oy (k: how much nearer it has come). Sizes grow by k, the glyphs don't: closer in, the
+// rock and its fire are drawn bigger on the same letter grid, so they show more detail. a: how much of it shows
+const NO_CAM = { k: 1, ox: 0, oy: 0, a: 1 }
+function view(T, o) {
+  const c = T.cam
+  o.x = o.x * c.k + c.ox
+  o.y = o.y * c.k + c.oy
+  return o
+}
 
 // ---------------- layout ----------------
 // W, H: the screen in css px; dpr: device px per css px; B: the hole's resting place (rest()); N: the name's
 // layout (name.js createName); A: the hole's letter grid (ascii.js createArt)
 export function createAsteroid(W, H, dpr, B, N, A) {
   const phone = W < PHONE
-  const T = { W, H, dpr, A, rr: phone ? SIZE_PHONE * W : SIZE * H, F: { s: NaN }, tmp: {}, q: new Float64Array(5) }
+  const T = { W, H, dpr, A, rr: phone ? SIZE_PHONE * W : SIZE * H, F: { s: NaN }, tmp: {}, q: new Float64Array(5), cam: NO_CAM }
   T.tornFont = `500 ${((A.CW * 12) / 7 * STREAM_GLYPH).toFixed(1)}px "JetBrains Mono", Menlo, Consolas, monospace`
   T.fr = FIRE * T.rr
   T.out = new Float32Array(72) // the rock's outline this frame (comet.js outline)
@@ -250,13 +260,13 @@ export const asteroidBusy = (s) => s > ENTER - 0.02 && s < END
 export const impactOf = (T, s) => (T && s >= T.impact.s - 0.04 ? T.impact : null)
 
 // ---------------- the fire's shape ----------------
-// the path behind it, len px back from its centre, as a polyline relative to its centre (F.tl: x, y, px back, ...)
+// the path behind it, len px back from its centre on screen, as a polyline relative to its centre (F.tl: x, y, px back, ...)
 const TAIL_N = 16
 function tailOf(T, F, len) {
   const P = F.tl || (F.tl = new Float64Array(3 * (TAIL_N + 1))), o = T.tmp
   for (let k = 0; k <= TAIL_N; k++) {
     const b = (k * len) / TAIL_N
-    pointAt(T, F.a - b, o)
+    view(T, pointAt(T, F.a - b / T.cam.k, o))
     P[3 * k] = o.x - F.x
     P[3 * k + 1] = o.y - F.y
     P[3 * k + 2] = b
@@ -365,7 +375,7 @@ function stroke(dx, dy) {
 // Over the rock itself only thinner, cooler flames lick back across it in patches, so the rock shows through under
 // them. It shrinks and stretches with the rock
 function drawFlames(T, F, t) {
-  const { A, W, H, q } = T, cw = A.CW, chh = A.CH, fx = F.tx, fy = F.ty, x0 = F.x, y0 = F.y, O = outline(F.s, t, T.out), n = O.length, fr = T.fr * F.sz
+  const { A, W, H, q } = T, cw = A.CW, chh = A.CH, fx = F.tx, fy = F.ty, x0 = F.x, y0 = F.y, O = outline(F.s, t, T.out), n = O.length, fr = T.fr * F.sz * T.cam.k
   let big = 0
   for (let k = 0; k < n; k++) big = Math.max(big, O[k] * fr)
   if (big < 0.5) return
@@ -400,17 +410,18 @@ function drawFlames(T, F, t) {
 // The dust trail, on the hole's own letter grid: back along the way it came, cooling from flame to dim red dust,
 // widening as it goes; it thins and shortens as the rock is torn away
 function drawTrail(T, F, t) {
-  const { A } = T, cols = A.cols, rows = A.rows, cw = A.CW, chh = A.CH, NH = 28, rs = TRAIL_WIDTH * T.rr * Math.pow(F.sz, 0.6)
+  // lengths along it (a, Lmax, rs, wOf) are in the scene; across it, on screen, they are K times that
+  const { A } = T, K = T.cam.k, cols = A.cols, rows = A.rows, cw = A.CW, chh = A.CH, NH = 28, rs = TRAIL_WIDTH * T.rr * Math.pow(F.sz, 0.6)
   const Lmax = TRAIL * T.rr * (0.3 + 0.7 * F.m), glow = TRAIL_GLOW * smooth(F.m / 0.1), P = [], o = T.tmp
-  if (glow < 0.01 || rs < 0.5) return
-  for (let k = 0; k < NH; k++) { const a = (k * Lmax) / (NH - 1); pointAt(T, F.a - a, o); P.push({ x: o.x, y: o.y, a, d: o.d }) }
+  if (glow < 0.01 || rs * K < 0.5) return
+  for (let k = 0; k < NH; k++) { const a = (k * Lmax) / (NH - 1); view(T, pointAt(T, F.a - a, o)); P.push({ x: o.x, y: o.y, a, d: o.d }) }
   const a0 = rs * 0.7 * F.lam // it starts under the flames
   const best = T.best, ta = T.ta, td = T.td, touched = T.touched
   let nt = 0
   const wOf = (a) => rs * (0.45 + 1.0 * Math.pow(Math.min(1, a / Lmax), 0.7))
   for (let k = 0; k + 1 < P.length; k++) {
-    const p = P[k], q = P[k + 1], w = 1.6 * wOf(q.a) + cw
-    if (q.a < a0 - w) continue // under the flames: nothing to draw
+    const p = P[k], q = P[k + 1], w = (1.6 * wOf(q.a) + cw / K) * K
+    if (q.a < a0 - w / K) continue // under the flames: nothing to draw
     const i0 = Math.max(0, Math.floor((Math.min(p.x, q.x) - w) / cw)), i1 = Math.min(cols - 1, Math.floor((Math.max(p.x, q.x) + w) / cw))
     const j0 = Math.max(0, Math.floor((Math.min(p.y, q.y) - w) / chh)), j1 = Math.min(rows - 1, Math.floor((Math.max(p.y, q.y) + w) / chh))
     const ex = q.x - p.x, ey = q.y - p.y, el = ex * ex + ey * ey || 1
@@ -427,8 +438,8 @@ function drawTrail(T, F, t) {
   for (let n = 0; n < nt; n++) {
     const id = touched[n], d2 = best[id], a = ta[id]
     best[id] = 1e9
-    const w = wOf(a), px = A.G.px[id], py = A.G.py[id]
-    const nzv = NZ(a / (1.8 * rs) - t * 0.6, (Math.sqrt(d2) / rs) * 0.7 + 3, 2)
+    const w = wOf(a) * K, px = A.G.px[id], py = A.G.py[id]
+    const nzv = NZ(a / (1.8 * rs) - t * 0.6, (Math.sqrt(d2) / (rs * K)) * 0.7 + 3, 2)
     const I = Math.exp(-d2 / (w * w)) * Math.exp(-a / (0.55 * Lmax)) * sst(a0, a0 + 1.2 * rs, a) * (0.3 + 1.1 * nzv) * glow
     const hc = hash(id, 77)
     if (I < 0.05 || hc > 0.25 + 1.2 * I) continue // dust: sparse where it is thin
@@ -450,8 +461,8 @@ function drawSparks(T, s) {
     const ux = -dx * bk - dy * side * 1.2, uy = -dy * bk + dx * side * 1.2, ul = Math.hypot(ux, uy) || 1
     const e = tau * (1 - Math.exp(-age / tau)), rim = T.rr * (0.6 + 0.3 * hash(k, 6)) // it leaves from the rock's edge
     const x = x0 + (ux / ul) * rim + ux * v * e, y = y0 + (uy / ul) * rim + uy * v * e
-    const f = age / life, heat = 1.05 * Math.pow(1 - f, 1.1)
-    putD(T, heat > 0.75 ? '*' : heat > 0.45 ? '+' : heat > 0.2 ? "'" : '.', x, y, heat, 0.3 + 0.9 * (1 - f), S.wb)
+    const f = age / life, heat = 1.05 * Math.pow(1 - f, 1.1), c = T.cam
+    putD(T, heat > 0.75 ? '*' : heat > 0.45 ? '+' : heat > 0.2 ? "'" : '.', x * c.k + c.ox, y * c.k + c.oy, heat, 0.3 + 0.9 * (1 - f), S.wb)
   }
 }
 
@@ -486,7 +497,7 @@ function drawTorn(T, s, t) {
       const al = smooth(f / 0.06) * smooth((r - P.re) / (0.12 * P.R)) * GHOST[k]
       if (al < 0.04) continue
       const heat = 0.45 + 0.6 * (1 - c01((r - P.re) / Math.max(1, g.r0 - P.re))) // hotter as it falls in
-      putD(T, SCRAMBLE[Math.floor(hash(g.g * 4 + k, step) * SCRAMBLE.length)], X, Y, heat, 0.45 + al, wbOf(Math.sin(ph)), 1)
+      putD(T, SCRAMBLE[Math.floor(hash(g.g * 4 + k, step) * SCRAMBLE.length)], X * T.cam.k + T.cam.ox, Y * T.cam.k + T.cam.oy, heat, 0.45 + al, wbOf(Math.sin(ph)), 1)
     }
   }
 }
@@ -505,11 +516,13 @@ function blueOf(key) {
 // ---------------- drawing ----------------
 // This frame, worked out once for drawAsteroidUnder and drawAsteroidOver: where it is (T.F), and all its glyphs (fire,
 // trail, sparks, torn glyphs) drawn into the front layer and the one behind the hole, each with its glow
-function prep(T, s, t) {
+function prep(T, s, t, cam) {
   const F = T.F
-  if (F.s === s && F.t === t) return F
-  stateAt(T, s, F)
+  if (F.s === s && F.t === t && F.cam === cam) return F
+  T.cam = cam
+  view(T, stateAt(T, s, F))
   F.t = t
+  F.cam = cam
   for (const b of T.buckets.values()) b.n = 0
   drawTrail(T, F, t)
   if (s < SPARKS_UNTIL + 0.3) drawSparks(T, s)
@@ -517,6 +530,7 @@ function prep(T, s, t) {
   drawFlames(T, F, t)
   F.front = render(T, 0)
   F.back = render(T, 1)
+  T.cam = NO_CAM // the rest of the time (contacts, the impact) it works in the scene
   return F
 }
 // one layer's glyphs onto its canvas, then its glow; the one behind has what the hole hides cut out of it first
@@ -581,10 +595,9 @@ function drawRock(c, T, F, h, s, t, vis) {
   if (F.sz < 0.02 || vis < 0.002) return
   // the stretch undone, for the shader: screen offsets (y up) back to the round rock, column major
   const cs = F.tx, sn = -F.ty, p = 1 / F.lam, w = Math.sqrt(F.lam), m01 = cs * sn * (p - w)
-  const aniso = new Float32Array([cs * cs * p + sn * sn * w, m01, m01, sn * sn * p + cs * cs * w])
-  if (drawComet(c, { W: T.W, H: T.H, dpr: T.dpr, x: F.x, y: F.y, r: T.rr * F.sz, h, s, t, vis, aniso })) return
+  const aniso = new Float32Array([cs * cs * p + sn * sn * w, m01, m01, sn * sn * p + cs * cs * w]), R = T.rr * F.sz * F.cam.k
+  if (drawComet(c, { W: T.W, H: T.H, dpr: T.dpr, x: F.x, y: F.y, r: R, h, s, t, vis, aniso })) return
   // no WebGL2: a soft hot head where the rock would be
-  const R = T.rr * F.sz
   c.setTransform(T.dpr, 0, 0, T.dpr, 0, 0)
   c.translate(F.x, F.y)
   c.rotate(Math.atan2(F.ty, F.tx))
@@ -601,10 +614,11 @@ function drawRock(c, T, F, h, s, t, vis) {
 }
 
 // Under the gas (after the name): whatever of it is behind the hole, with what the hole hides cut out, so the shadow
-// and the disk's gas are in front of it. h: the hole on screen; s: the scroll in screens; t: the clock (fixed under reduced motion)
-export function drawAsteroidUnder(ctx, T, h, s, t) {
-  if (!(s > ENTER && s < END)) return
-  const F = prep(T, s, t)
+// and the disk's gas are in front of it. h: the hole on screen; s: the story's scroll in screens (about.js storyOf);
+// t: the clock (fixed under reduced motion); cam: the camera it is seen through (about.js cameraAt)
+export function drawAsteroidUnder(ctx, T, h, s, t, cam = NO_CAM) {
+  if (!(s > ENTER && s < END) || cam.a <= 0) return
+  const F = prep(T, s, t, cam)
   if (F.wb > 0.002 && F.sz >= 0.02) {
     if (!T.rk) T.rk = canvas(T.cv.width, T.cv.height)
     const [rk, x] = T.rk
@@ -615,17 +629,17 @@ export function drawAsteroidUnder(ctx, T, h, s, t) {
     drawRock(x, T, F, h, s, t, 1)
     hide(x, T)
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.globalAlpha = F.wb
+    ctx.globalAlpha = F.wb * cam.a
     ctx.drawImage(rk, 0, 0)
     ctx.globalAlpha = 1
   }
-  if (F.back) addLayer(ctx, T, T.cvB, T.glowsB, 1)
+  if (F.back) addLayer(ctx, T, T.cvB, T.glowsB, cam.a)
   ctx.setTransform(T.dpr, 0, 0, T.dpr, 0, 0)
 }
 // Over the gas: whatever of it is in front of the hole; the rock hides what is behind it, its fire's light goes over
-export function drawAsteroidOver(ctx, T, h, s, t) {
-  if (!(s > ENTER && s < END)) return
-  const F = prep(T, s, t), vis = smooth((s - ENTER) / FADE_IN)
+export function drawAsteroidOver(ctx, T, h, s, t, cam = NO_CAM) {
+  if (!(s > ENTER && s < END) || cam.a <= 0) return
+  const F = prep(T, s, t, cam), vis = smooth((s - ENTER) / FADE_IN) * cam.a
   drawRock(ctx, T, F, h, s, t, vis * (1 - F.wb))
   if (F.front) addLayer(ctx, T, T.cv, T.glows, vis)
   ctx.setTransform(T.dpr, 0, 0, T.dpr, 0, 0)

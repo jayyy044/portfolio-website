@@ -73,7 +73,7 @@ const buckets = new Map() // colour key -> the cells drawn in that colour this u
 // h: the hole now (blackhole.js's hole()); moved: it has moved since the last update
 export function drawArt(A, t, dt, h, moved = false) {
   const { G, out, actx } = A
-  frame(t, G, out, h.dive, 0, (h.cy - A.H / 2) / A.S + 0.02 * h.cam, h.inc, h.tilt) // the maths, centred on the hole
+  frame(t, G, out, h.dive, (h.cx - A.W / 2) / A.S, (h.cy - A.H / 2) / A.S + 0.02 * h.cam, h.inc, h.tilt) // the maths, centred on the hole
 
   for (let k = 0; k < G.n; k++) A.maskImg.data[4 * k + 3] = out.occ[k] * 255
   A.mctx.putImageData(A.maskImg, 0, 0)
