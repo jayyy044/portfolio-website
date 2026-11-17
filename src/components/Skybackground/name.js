@@ -294,20 +294,15 @@ function pieceXY(sh, im, i, p, ag, o) {
   }
   return o
 }
-// The pieces of the shattered line, for about.js: [{ id, i (its letter), p }], and where one is at scroll s (css px,
-// before the camera), how hot (0..1) and how much of it is left (0..1: it fades over its life)
+// The pieces of the shattered line, for about.js: [{ id, i (its letter), p }]
 export const piecesOf = (N, im) => shatterAt(N, im).L.flatMap((L, i) => L.pieces.map((p) => ({ id: p.id, i, p })))
-export function pieceAt(N, im, f, s) {
-  const sh = shatterAt(N, im), L = sh.L[f.i], age = Math.max(0, s - sh.at[f.i]), [x, y] = pieceXY(sh, im, f.i, f.p, age, [0, 0])
-  return { x, y, heat: L.h0 * Math.exp(-age / COOL), left: 1 - smooth(age / f.p.life) }
-}
 // a piece of letter c (the device-px rect sx, sy, sw, sh of its cell) at heat h (0 = cooled, 1 = white hot), alpha a,
-// centred at X, Y (css px), turned by rot; near: it cools to an ember, else back to its own colour
-function drawPiece(x, N, c, near, h, a, sx, sy, sw, sh, X, Y, rot) {
+// centred at X, Y (css px), turned by rot, scaled by sc; near: it cools to an ember, else back to its own colour
+function drawPiece(x, N, c, near, h, a, sx, sy, sw, sh, X, Y, rot, sc = 1) {
   if (a < 0.01) return
   h = clamp01(h)
   const hi = h >= 0.5, lo = hi ? c.hot : near ? c.ember : c.cool, up = hi ? c.white : c.hot, w = hi ? (h - 0.5) / 0.5 : h / 0.5
-  const cr = Math.cos(rot), sr = Math.sin(rot)
+  const cr = Math.cos(rot) * sc, sr = Math.sin(rot) * sc
   x.setTransform(cr, sr, -sr, cr, X * N.dpr, Y * N.dpr)
   if (w < 0.99) {
     x.globalAlpha = a * (1 - w)
@@ -318,10 +313,14 @@ function drawPiece(x, N, c, near, h, a, sx, sy, sw, sh, X, Y, rot) {
     x.drawImage(up, sx, sy, sw, sh, -sw / 2, -sh / 2, sw, sh)
   }
 }
-// cam: the camera (about.js cameraAt: css px on screen = k * these + ox, oy); away(id): how much of piece id is still
-// here (0 = about.js has taken it), or null
-function drawShatter(x, N, im, s, cam, away) {
-  const { dpr, cells, fs } = N, sh = shatterAt(N, im), GH = [1, 0.32, 0.12], o = [0, 0], K = cam.k
+// cam: the camera (about.js cameraAt: css px on screen = k * these + ox, oy). steer(id, copy, o): once piece id is
+// whipped away to the about-me (about.js steerOf), it moves o (the piece, or the copy-th fading copy behind it: [x, y]
+// css px before the camera) to where it is going, sets o[2] to how far it has been taken (that lights it up again,
+// however faded it was), o[3] to how much of its tumble it keeps and o[4] to its size, and returns how much of it is
+// left (0..1); < 0 while it isn't taken. null: none is
+function drawShatter(x, N, im, s, cam, steer) {
+  const { dpr, cells, fs } = N, sh = shatterAt(N, im), GH = [1, 0.32, 0.12], o = [0, 0, 0, 1, 1], K = cam.k
+  const chipsLeft = steer ? Math.max(0, steer(-1, 0, o)) : 1 // the chips go as the pieces about.js doesn't want do
   const vx = (v) => v * K + cam.ox, vy = (v) => v * K + cam.oy, lined = K === 1 && !cam.ox && !cam.oy // lined: the line is drawn under these
   x.textAlign = 'center'
   x.textBaseline = 'middle'
@@ -341,14 +340,20 @@ function drawShatter(x, N, im, s, cam, away) {
       return
     }
     for (const p of L.pieces) {
-      const here = away ? away(p.id) : 1
-      if (age > p.life || here <= 0) continue
-      const a = (1 - smooth(age / p.life)) * here, h = L.h0 * Math.exp(-age / COOL)
-      for (let gh = 0; gh < 3; gh++) { // the piece, and while it flies fast two fading copies behind it
+      const a = age > p.life ? 0 : 1 - smooth(age / p.life), h = L.h0 * Math.exp(-age / COOL)
+      for (let gh = 0; gh < 3; gh++) { // the piece, and while it flies fast (or is whipped away) two fading copies behind it
         const ag = age - gh * 0.008
-        if (gh && (ag <= 0 || age > 2.5 * DRAG)) break
-        pieceXY(sh, im, i, p, ag, o)
-        drawPiece(x, N, c, L.near, h, a * GH[gh], p.sx, p.sy, p.sw, p.sh, vx(o[0]), vy(o[1]), p.spin * (1 - Math.exp(-ag / DRAG)))
+        pieceXY(sh, im, i, p, Math.max(0, ag), o)
+        o[2] = 0
+        o[3] = o[4] = 1
+        const left = steer ? steer(p.id, gh, o) : -1
+        if (gh && left < 0 && (ag <= 0 || age > 2.5 * DRAG)) break
+        const aa = left < 0 ? a : Math.max(a, 0.85 * o[2]) * left
+        if (aa <= 0) {
+          if (left < 0) break // burnt out and not caught: nor are its copies
+          continue
+        }
+        drawPiece(x, N, c, L.near, h, aa * GH[gh], p.sx, p.sy, p.sw, p.sh, vx(o[0]), vy(o[1]), p.spin * (1 - Math.exp(-Math.max(0, ag) / DRAG)) * o[3], o[4])
       }
     }
     x.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -356,7 +361,7 @@ function drawShatter(x, N, im, s, cam, away) {
     for (const q of L.chips) {
       if (age > q.life) continue
       const e = 1 - Math.exp(-age / (0.6 * DRAG)), h = clamp01(1.1 * L.h0 * Math.exp(-age / (0.7 * COOL))), a = 1 - smooth(age / q.life)
-      x.globalAlpha = 0.8 * a
+      x.globalAlpha = 0.8 * a * chipsLeft
       x.fillStyle = rgb(EMBER_RGB.map((v, n) => Math.round(v + (WHITE_RGB[n] - v) * h)))
       x.fillText(h > 0.75 ? '*' : h > 0.45 ? '+' : h > 0.2 ? "'" : '.', vx(q.hx + q.ux * q.D * e), vy(q.hy + q.uy * q.D * e + 0.5 * SAG * age * age))
     }
@@ -382,10 +387,10 @@ function drawShatter(x, N, im, s, cam, away) {
 // Draw the line as far as the scroll s (in screens) has brought it, onto ctx (scaled to css px),
 // plus its bloom. h: the hole now (hole() in blackhole.js); t: the clock, for the sweep (null: no sweep).
 // impact: the asteroid hitting it (asteroid.js impactOf), or null; the sweep stops once that comes. Once it has
-// shattered: cam, the camera the pieces are seen through (about.js cameraAt), and away(id), how much of each piece
-// about.js has left here (or null)
+// shattered: cam, the camera the pieces are seen through (about.js cameraAt), and steer, how they are whipped away to
+// the about-me (drawShatter; about.js steerOf), or null
 const NO_CAM = { k: 1, ox: 0, oy: 0 }
-export function drawName(ctx, N, h, s, t, impact = null, cam = NO_CAM, away = null) {
+export function drawName(ctx, N, h, s, t, impact = null, cam = NO_CAM, steer = null) {
   const p = progress(s)
   if (p <= 0.0005 || (impact && s > shatterAt(N, impact).last + SHARD_LIFE * 1.2)) return
   const { x, dpr, W, cells, G } = N
@@ -396,7 +401,7 @@ export function drawName(ctx, N, h, s, t, impact = null, cam = NO_CAM, away = nu
   if (p >= 0.9995) {
     // landed: the finished line, crisp, at native size (once the camera moves off it, its letters are drawn one by one)
     if (!impact || (cam.k === 1 && !cam.ox && !cam.oy)) x.drawImage(N.line.cv, N.line.x, N.line.y)
-    if (impact) drawShatter(x, N, impact, s, cam, away)
+    if (impact) drawShatter(x, N, impact, s, cam, steer)
     // the sweep: each letter it is on has its slot of the line cleared, then scrambles, then lands again
     else if (t != null) cells.forEach((c, i) => {
       const d = sweepAt(N, c, t)

@@ -1,17 +1,19 @@
-// The about-me, typeset by the debris, and the camera that films it. Right after the asteroid smashes the name, time
-// slows to a crawl (bullet time: the rock, its sparks and the name's pieces all but stop) and the camera pushes in on
-// the rock, then glides it over to one side. Near things grow a lot, the far hole and sky only a little, drifting
-// off-centre; nothing is scaled as a picture: the rock and its fire are drawn bigger on the same letter grid, so its
-// craters resolve into more glyphs. The embers its fire sheds write the kicker, and the name's pieces fly to the letters
-// of the paragraph beside it, line by line, scrambling as they go, each piece splitting on the way into two letters;
-// each locks to its letter as it lands and cools from the fire's blue-white to the text's colour. It holds, readable,
-// while the rock tumbles beside it. Then the text cools and drifts apart into embers (away from the hole, never into
-// it), and the camera pulls back to a wide shot that frames the hole and the loops the rock is about to go round, while
-// time runs on: the capture plays as before, later in the scroll. All a pure function of the scroll; the clock only
-// flickers the glyphs in flight. Reduced motion: no camera; the rock fades out as the text fades in where it lands, and back.
-import { smooth } from './blackhole'
-import { hash, SCRAMBLE, GHOST, GHOST_GAP, piecesOf, pieceAt } from './name'
-import { posAt, STORY_END, GONE } from './asteroid'
+// The about-me, written by the falling asteroid, and the camera that films it. Right after the asteroid smashes the
+// name, time slows (it keeps falling, slowly) and the camera pushes in on the rock and glides it onto a track down the
+// screen, the way it is falling; nothing is scaled as a picture: the rock and its fire are drawn bigger on the same letter
+// grid. A few of the name's pieces whip across, streaked, and wait, small and dim and upright, beside the places their
+// letters will take; the rest fade away. Then the rock writes the about-me as it falls: as it passes each line, the line
+// types itself left to right, each letter scrambling briefly in its own place and locking white hot, then cooling to its
+// colour; a waiting piece slides into its letter as it locks. Wide screens have the text in a block beside the rock's
+// path, tall ones across it above the rock. It holds, still and readable, while the rock comes to rest near the hole
+// (which sinks out of the text's way), the asteroid's glyph field parting round the type; then, as the rock moves on, the
+// letters break up into the tail's own glyphs and are drawn into its tail, streaming away down it (never toward the
+// hole), and the camera pulls back to a wide shot that frames the hole and the loops the rock is about to go round,
+// while time runs on: the capture plays as before. All a pure function of the scroll. Reduced motion: no camera;
+// the rock fades out while the text fades in, line by line, and back.
+import { smooth, POOLS } from './blackhole'
+import { hash, piecesOf } from './name'
+import { pathAt, STORY_END, GONE, BLUE, DUST, stroke } from './asteroid'
 
 // ---------- the copy: type your own here ----------
 export const ABOUT = {
@@ -21,96 +23,123 @@ export const ABOUT = {
 
 // ---------- the beats, in screens of scroll (the asteroid hits the name at 2.68, asteroid.js) ----------
 const ZOOM_AT = 2.78 // time starts to slow and the camera to push in (the line has all broken by about here)
-const SLOW_IN = 0.18 // screens of scroll for time to slow to CRAWL
-const ZOOM_IN = 0.4 // screens of scroll the push in takes (it closes in round the rock where it is)
-const PAN_AT = 2.94 // once time has all but stopped, the camera glides the rock over to where it holds it
-const PAN = 0.4 // screens of scroll that glide takes
-const CRAWL = 0.04 // how fast the story runs while the camera is in, against normal (0.04 = a twenty-fifth)
-const BUILD_FROM = 2.98 // the first fragment leaves for its letter (the kicker's)
-const BUILD_TO = 3.9 // and the last one lands; the lines in between are spread evenly
-const DISPERSE_AT = 4.4 // the text starts to cool and drift apart
-const DISPERSE = 0.3 // screens of scroll each letter takes to burn out
-const DISPERSE_SPREAD = 0.15 // and how far apart, in screens of scroll, the letters start to go
+const SLOW_IN = 0.18 // screens of scroll for time to slow to WRITE_RATE
+const WRITE_RATE = 0.3 // how fast the story runs while the rock writes, against normal: it keeps falling, slowly
+const WHIP_FROM = 2.8, WHIP_TO = 2.98 // the wanted pieces of the name whip across between these; the rest fade away
+const WRITE_FROM = 3 // the camera is in and the rock on its track: it starts writing (the top line)
+const WRITE_TO = 3.85 // and the last letter has locked; then the text holds while the rock comes to rest near the hole
+const CLEAR_AT = 4.4 // as the rock moves on, the letters start to dissolve into its tail, those nearest it first
+const DISSOLVE = 0.35 // screens of scroll each takes, from breaking up to gone down the tail
+const CLEAR_SPREAD = 0.15 // from the first letter going to the last
 const PULL_AT = 4.5 // the camera starts to pull back and time to speed up again
-const PULL = 0.5 // screens of scroll that takes; then the story runs on as before, later by the time it was held
+const PULL = 0.5 // screens of scroll that takes; then the story runs on as before, later by the time it was slowed
 // ---------- the camera ----------
-const ROCK_SIZE = 0.34, ROCK_SIZE_PHONE = 0.42 // the rock close up: its diameter, in screen heights (phones: in screen widths)
-const ROCK_AT = [0.72, 0.46], ROCK_AT_PHONE = [0.6, 0.22] // where the camera holds it, in screen widths and heights
-const CREEP = [-0.02, 0.02] // how far it still creeps on while held, in screen widths and heights per screen of scroll
-const FAR_ZOOM = 1.12 // how much bigger the hole and the sky get at the closest (far away: a little)
+const WRITE_ZOOM = 1.3 // how much nearer the camera is while the rock writes (it pushes in from ZOOM_AT to WRITE_FROM)
+const V_MIN = 0.12 // the slowest the rock falls down the screen while it writes, in screen heights per screen of scroll
+const HOLD_EASE = 0.2 // after the last letter the rock slows and comes to rest near the hole, in about three times this, screens of scroll
+const FAR_IN = 0.5 // screens of scroll the hole and the sky take to come nearer and sink, from ZOOM_AT (slower than the push in)
+const FAR_ZOOM = 1.08 // how much bigger the hole and the sky get at the closest (far away: a little)
 const PARALLAX = 0.2 // how much of the camera's pan the hole and the sky follow: 0 = none, 1 = as much as the rock
-// the wide shot it pulls back to, for the capture: the hole and the loops round it framed, moved only as far as that needs
+// the wide shot for the capture: the hole and the loops round it framed, moved only as far as that needs; it comes in
+// once the rock is falling into the hole fast enough that the lift never turns it back
+const FRAME_AT = 4.75, FRAME_IN = 0.9 // from, and screens of scroll it takes
 const FRAME_MARGIN = 0.05, FRAME_MARGIN_X = 0.03 // room kept clear round the loops and the arch over the hole: screen heights, widths
 const FRAME_ZOOM_MAX = 1.2 // the most it moves in on the hole when there is room (it never moves out)
+// ---------- the name's pieces ----------
+const PIECES = 28, PIECES_TALL = 18 // how many of them become letters (wide screens, tall ones); the others fade away
+const WHIP = 0.16 // screens of scroll a piece takes to whip across to where it waits
+const WAIT_CELLS = 2.5 // where it waits: level with its letter, this many character cells to its right
+const WAIT_SIZE = 0.6, WAIT_ALPHA = 0 // how big and how bright it is while it waits, against itself (0 = it streaks over and dies out as it arrives)
+const SLIDE = 0.05 // screens of scroll it takes to slide into its letter's place, shrinking and fading, as the letter locks
+const STREAK = 0.012 // screens of scroll between a moving piece and each fading copy behind it (its streak)
 // ---------- the text ----------
-const TEXT_BOX = [0.07, 0.25, 0.44], TEXT_BOX_PHONE = [0.08, 0.5, 0.84] // its left edge, top and width: screen widths, heights, widths
-const FONT_MIN = 14, FONT_MAX = 24 // its size, px; in between it follows the screen (a 64th of its width or a 40th of its height, the smaller)
-const MAX_COLS = 48 // the longest a line gets, in characters
-const LINE_GAP = 1.65 // line height, in font sizes
-const KICKER_GAP = 0.5 // extra room under the kicker, in lines
+const TEXT_RIGHT = 0.06 // wide screens (the text beside the rock's path): its right margin, in screen widths
+const TEXT_MAX_W = 0.5 // and the most of the screen's width it takes
+const TEXT_SIDE_TALL = 0.07 // tall screens (the text across the rock's path): side margins, in screen widths
+const TEXT_TOP_TALL = 0.3 // and the text's top, in screen heights (the rock is lower by then: it writes the lines it has passed)
+const TEXT_BOTTOM = 0.06 // how far above the bottom edge the text stops, in screen heights (wide screens: it starts level with the rock)
+const FIRE_CLEAR = 2.3 // how far the text keeps from the rock's centre, in its radii (its fire reaches about 1.7, its glow a little more)
+const HOLE_CLEAR = 0.03 // how far it keeps above the hole's light, in screen heights (the hole sinks out of its way while the camera is in)
+const FONT_MIN = 15, FONT_MAX = 28 // its size, px: as big as fits, up to a 56th of the screen's width (tall screens: a 26th) or a 34th of its height
+const MAX_COLS = 46 // the longest a line gets, in characters
+const LINE_GAP = 1.6 // line height, in font sizes
+const LINE_GAP_MIN = 1.35 // the tightest it gets, when the text is too long to fit otherwise
+const KICKER_GAP = 0.8 // extra room under the kicker, in lines
 const TEXT_RGB = [236, 232, 240], KICKER_RGB = [255, 177, 90] // the paragraph and the kicker, as the name's line and name
-const HOT_RGB = [235, 248, 255], ICE_RGB = [110, 180, 255] // a fragment in flight, white hot as it leaves, cooling to blue
-const EMBER_RGB = [235, 92, 34] // a letter burning out
-const FLIGHT = 0.2 // screens of scroll a fragment takes to reach its letter
-const LINE_SPREAD = 0.1 // screens of scroll over which a line's fragments leave, left to right
-const SPLIT = 2 // how many letters each piece of the name splits into on the way (when they run out, the fire sheds embers for the rest)
-const KICKER_BY_FIRE = true // the kicker is written by embers the rock's fire sheds, the paragraph by the name's pieces
-const SPLIT_AT = 0.4 // how far into its flight a piece splits
-const SPLIT_SPREAD = 0.12 // how far its halves fork apart, in flight lengths
-const ARC = 0.22 // how far a flight bows to one side, in flight lengths
-const FLIGHT_RATE = 16 // how often a glyph in flight changes, a second
-const LAND_COOL = 0.1 // screens of scroll a landed letter takes to cool to its colour
-const DRIFT = 0.1 // how far the burning-out letters drift, in screen heights (up, and away from the hole)
-const BACKDROP = 0.6 // how much the gas and stars behind the text dim while it is up: 0 = not at all, 1 = black
-const GLOW = 0.3 // the bloom round the text
+const HOT_RGB = [255, 250, 242] // a letter as it locks, white hot
+const LINE_SWEEP = 0.08 // screens of scroll a line takes to type, left to right, once the rock has passed it
+const SCRAMBLE = 0.03 // screens of scroll a letter scrambles in its place before it locks
+const SWAPS = 3 // how many glyphs it shows in that time
+const SCRAMBLE_ALPHA = 0.4 // how bright, against the locked text
+const SCRAMBLE_SET = 'acemnorsuvxz' // what it shows: lowercase, the text's own weight
+const COOL = 0.1 // screens of scroll a locked letter takes to cool from white hot to its colour
+const KNOCKOUT = 0.6 // under each written line the asteroid's glyph field parts: the share of its cells left out (0 = off, 1 = all)
+const FRAY = 1.5 // and over how many of the hole's cells past the type that thins out to none
+// the dissolve: each letter breaks into the tail's own glyphs, which are drawn into the tail and stream away down it
+const MOTES = 2 // how many glyphs each letter breaks into
+const BREAK = 0.15 // how far into its dissolve the type has gone, its glyphs in its place
+const JOIN = [0.12, 0.45] // when they are drawn into the tail: from, and over, as shares of the dissolve; then they stream down it
+const FLOW = 0.6 // how far down the tail they have streamed by the end, in screen heights (speeding up)
+const IN_TAIL = 0.3 // how far off the tail's middle they stream, at most, in rock radii
+const HOLE_KEEP = 2.5 // they only join the tail where it, and all of it further back, is this far from the hole's centre, in its radii
+const PATH_KEEP = 1.8 // and only where the way there keeps this far from it, in its radii (else they fade where they are)
+const SMEAR = 0.006 // screens of scroll between a streaming glyph and the faint copy of it behind
+const GLOW = 0.25 // the bloom round the text (the name's, name.js GLOW)
 
-const PHONE = 700
 const MONO = '"JetBrains Mono", Menlo, Consolas, monospace'
-const RAMP = ['.', ':', '+', '*', '#'] // the ticks a letter steps through just before it lands, as the name's do
 const c01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x)
 const smoother = (x) => { x = c01(x); return x * x * x * (x * (6 * x - 15) + 10) }
-const ease = (x) => 1 - (1 - x) * (1 - x)
 const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k))
 const NO_CAM = { k: 1, ox: 0, oy: 0, a: 1, kf: 1, fox: 0, foy: 0 }
 
 // ---------------- time and the camera ----------------
 const I = (u) => u * u * u * (1 - u / 2) // the area under smooth() from 0 to u
 // Where the asteroid's story (asteroid.js, and the name's shatter) has got to at scroll s: s itself up to ZOOM_AT; then
-// it slows to CRAWL while the camera is in, and runs at full speed again once it has pulled back, DELAY behind
+// it slows to WRITE_RATE while the camera is in, and runs at full speed again once it has pulled back, DELAY behind
 export function storyOf(s) {
   if (s <= ZOOM_AT) return s
   const u1 = c01((s - ZOOM_AT) / SLOW_IN), u3 = c01((s - PULL_AT) / PULL)
   const held = SLOW_IN * I(u1) + Math.max(0, Math.min(s, PULL_AT) - ZOOM_AT - SLOW_IN) + PULL * (u3 - I(u3))
-  return s - (1 - CRAWL) * held
+  return s - (1 - WRITE_RATE) * held
 }
-const DELAY = (1 - CRAWL) * (SLOW_IN / 2 + PULL_AT - ZOOM_AT - SLOW_IN + PULL / 2)
+const DELAY = (1 - WRITE_RATE) * (SLOW_IN / 2 + PULL_AT - ZOOM_AT - SLOW_IN + PULL / 2)
 export const ROOM_END = STORY_END + DELAY // the page's scroll room, in screens
-// how close the camera is, and how far over it has glided, 0..1; both go back as it pulls back
+// how close the camera is, and how far onto the rock's track it has glided, 0..1; both go back as it pulls back
 const pulled = (s) => smoother((s - PULL_AT) / PULL)
-const closeness = (s) => smoother((s - ZOOM_AT) / ZOOM_IN) * (1 - pulled(s))
-const panned = (s) => smoother((s - PAN_AT) / PAN) * (1 - pulled(s))
+const framed = (s) => smoother((s - FRAME_AT) / FRAME_IN)
+const closeness = (s) => smoother((s - ZOOM_AT) / (WRITE_FROM - ZOOM_AT)) * (1 - pulled(s))
+const farness = (s) => smoother((s - ZOOM_AT) / FAR_IN) * (1 - pulled(s)) // the same for the far things
+// how far the hole has sunk out of the text's way: it only comes back up once the last letter has gone
+const sunk = (s) => smoother((s - ZOOM_AT) / FAR_IN) * (1 - smoother((s - CLEAR_AT - CLEAR_SPREAD - 1.1 * DISSOLVE) / PULL))
+// where the camera holds the rock on screen at scroll s: down its track at the writing's pace, then slowing to rest
+function trackAt(X, s) {
+  const u = X.r0 + (s <= WRITE_TO ? X.v * (s - WRITE_FROM) : X.v * (WRITE_TO - WRITE_FROM + HOLD_EASE * (1 - Math.exp(-(s - WRITE_TO) / HOLD_EASE))))
+  return [X.start[0] + X.dir[0] * u, X.start[1] + X.dir[1] * u]
+}
 
-// The camera at scroll s. Near things (the rock, its fire, the name's pieces): on screen = k * scene + ox, oy; a: how
-// much of the rock shows. Far things (the hole, the sky): kf * scene + fox, foy. X: the layout (createAbout); T: the asteroid's.
-// Two moves, one on the other: the wide shot (the page as it was, easing into X.frame as the camera pulls back), and the
-// push in on the rock from it, with parallax
+// The camera at scroll s. Near things (the rock, its fire, the name's pieces): on screen = k * scene + ox, oy; rx, ry:
+// the rock on screen; a: how much of it shows. Far things (the hole, the sky): kf * scene + fox, foy. X: the layout
+// (createAbout); T: the asteroid's. Two moves, one on the other: the wide shot (the page as it was, easing into X.frame
+// after the pull back), and the push in from it onto the rock's track, with parallax, the hole sinking X.sink px
 export function cameraAt(X, T, s) {
-  const c = closeness(s), g = X.reduced ? 0 : pulled(s)
-  if (c <= 0 && g <= 0) return NO_CAM
-  if (X.reduced) return { ...NO_CAM, a: 1 - c }
+  const c = closeness(s), g = X.reduced ? 0 : framed(s)
+  if (c <= 0 && g <= 0 && sunk(s) <= 0) return NO_CAM
+  if (X.reduced) return { ...NO_CAM, a: 1 - c, foy: X.sink * sunk(s) } // no zoom: the rock fades out, the hole only sinks out of the text's way
   const kb = 1 + (X.frame.k - 1) * g, bx = X.frame.x * g, by = X.frame.y * g // the wide shot: on screen = kb * scene + bx, by
-  if (c <= 0) return { k: kb, ox: bx, oy: by, a: 1, kf: kb, fox: bx, foy: by }
-  const [wx, wy] = posAt(T, storyOf(s)), fx = wx * kb + bx, fy = wy * kb + by // the rock, in the wide shot
-  const k = 1 + (X.k - 1) * c, kf = 1 + (FAR_ZOOM - 1) * c, held = s - ZOOM_AT, m = panned(s)
-  const px = fx + (X.at[0] + X.creep[0] * held - fx) * m, py = fy + (X.at[1] + X.creep[1] * held - fy) * m // and on screen
-  return { k: k * kb, ox: k * (bx - fx) + px, oy: k * (by - fy) + py, a: 1,
-    kf: kf * kb, fox: kf * (bx - fx) + fx + (px - fx) * PARALLAX, foy: kf * (by - fy) + fy + (py - fy) * PARALLAX }
+  if (c <= 0) return { k: kb, ox: bx, oy: by, a: 1, kf: kb, fox: bx, foy: by + X.sink * sunk(s) }
+  const W0 = pathAt(T, storyOf(s), 0), fx = W0.x * kb + bx, fy = W0.y * kb + by, [tx, ty] = trackAt(X, s) // the rock in the wide shot; its track
+  const k = 1 + (X.k - 1) * c, cf = farness(s), kf = 1 + (FAR_ZOOM - 1) * cf, px = fx + (tx - fx) * c, py = fy + (ty - fy) * c // and on screen
+  return { k: k * kb, ox: k * (bx - fx) + px, oy: k * (by - fy) + py, a: 1, rx: px, ry: py,
+    kf: kf * kb, fox: kf * (bx - fx) + fx + (px - fx) * PARALLAX * cf, foy: kf * (by - fy) + fy + (py - fy) * PARALLAX * cf + X.sink * sunk(s) }
 }
 // the hole h (blackhole.js hole()) seen through the camera
 export function farOf(h, cam) {
   if (cam.kf === 1 && !cam.fox && !cam.foy) return h
   return { ...h, cx: h.cx * cam.kf + cam.fox, cy: h.cy * cam.kf + cam.foy, R: h.R * cam.kf, dive: h.dive * cam.kf }
 }
+// how far above the hole's centre its light reaches, dx from it across, both in its radii: the arch over the shadow,
+// then the disk out to its tips (blackhole.js REST_TOP, REST_HALF_WIDTH, with a little to spare)
+const holeTop = (dx) => { const a = Math.abs(dx); return a < 2.6 ? 1.95 * Math.sqrt(1 - (a / 2.6) ** 2) + 0.15 : a < 5.1 ? 0.5 : 0 }
 
 // ---------------- layout ----------------
 function canvas(w, h) {
@@ -119,96 +148,6 @@ function canvas(w, h) {
   c.height = h
   return [c, c.getContext('2d')]
 }
-// greedy word wrap to cols characters
-function wrap(text, cols) {
-  const out = []
-  let line = ''
-  for (const w of text.split(/\s+/)) {
-    if (line && line.length + 1 + w.length > cols) {
-      out.push(line)
-      line = w
-    } else line = line ? `${line} ${w}` : w
-  }
-  if (line) out.push(line)
-  return out
-}
-const bez = (a, b, c, d, u) => { const v = 1 - u; return v * v * v * a + 3 * v * v * u * b + 3 * v * u * u * c + u * u * u * d }
-
-// Lay the text out for this screen, and work out every flight: which piece of the name (or which ember off the rock)
-// goes to which letter, when it leaves and lands. W, H, dpr: the screen; N: the name (name.js createName); T: the
-// asteroid (asteroid.js createAsteroid); reduced: prefers reduced motion
-export function createAbout(W, H, dpr, N, T, reduced) {
-  const phone = W < PHONE, snap = (v) => Math.round(v * dpr) / dpr
-  const [cv, x] = canvas(Math.round(W * dpr), Math.round(H * dpr))
-  const [glow, gx] = canvas(Math.max(1, Math.round(W / 3)), Math.max(1, Math.round(H / 3)))
-  const fs = Math.round(Math.max(FONT_MIN, Math.min(FONT_MAX, W / 64, H / 40))), font = `500 ${fs}px ${MONO}`
-  x.font = font
-  const cw = x.measureText('M').width, lh = fs * LINE_GAP, [bl, bt, bw] = phone ? TEXT_BOX_PHONE : TEXT_BOX
-  const left = bl * W, top = bt * H, cols = Math.max(12, Math.min(MAX_COLS, Math.floor((bw * W) / cw)))
-  const lines = [[ABOUT.kicker, true], ...wrap(ABOUT.text, cols).map((l) => [l, false])]
-  const slots = []
-  let y = top + lh / 2
-  lines.forEach(([str, kick], L) => {
-    ;[...str].forEach((ch, col) => {
-      if (ch !== ' ') slots.push({ ch, kick, L, col, x: snap(left + (col + 0.5) * cw), y: snap(y), j: slots.length })
-    })
-    y += lh * (kick ? 1 + KICKER_GAP : 1)
-  })
-  // the dimmed patch behind it: a soft black box, drawn once, small
-  const [back, bx] = canvas(Math.max(1, Math.round(W / 4)), Math.max(1, Math.round(H / 4)))
-  bx.filter = 'blur(8px)'
-  bx.fillStyle = '#000'
-  bx.fillRect((left - 2 * cw) / 4, (top - lh) / 4, (cols * cw + 4 * cw) / 4, (y - top + lh) / 4)
-  bx.filter = 'none'
-
-  const X = { W, H, dpr, reduced, cv, x, glow, gx, back, font, fs, slots, groups: [], depOf: null,
-    k: (phone ? ROCK_SIZE_PHONE * W : ROCK_SIZE * H) / (2 * T.ball * T.rr), at: phone ? [ROCK_AT_PHONE[0] * W, ROCK_AT_PHONE[1] * H] : [ROCK_AT[0] * W, ROCK_AT[1] * H],
-    creep: [CREEP[0] * W, CREEP[1] * H], hole: [T.P.cx, T.P.cy], frame: frameOf(T, W, H) }
-
-  // when each letter's fragment leaves: line by line, each line left to right
-  const step = lines.length > 1 ? (BUILD_TO - BUILD_FROM - LINE_SPREAD - 1.15 * FLIGHT) / (lines.length - 1) : 0
-  for (const q of slots) q.dep = BUILD_FROM + q.L * step + (q.col / cols) * LINE_SPREAD + 0.012 * hash(q.j, 41)
-  // the name's pieces still there when the text is building, nearest the text first
-  const im = T.impact, mid = [left + (cols * cw) / 2, (top + y) / 2], c0 = cameraAt(X, T, BUILD_FROM), s0 = storyOf(BUILD_FROM), all = piecesOf(N, im)
-  const pieces = all.map((f) => {
-    const q = pieceAt(N, im, f, s0)
-    return { f, d: Math.hypot(q.x * c0.k + c0.ox - mid[0], q.y * c0.k + c0.oy - mid[1]), ok: pieceAt(N, im, f, storyOf(BUILD_TO)).left > 0.2 }
-  }).filter((p) => p.ok).sort((a, b) => a.d - b.d)
-  X.depOf = new Float64Array(all.length).fill(Infinity) // ids run 0 .. all.length - 1
-  // each piece takes the next SPLIT letters of a line; the kicker's letters, and any left once they run out, are embers off the rock, one each
-  let pi = 0
-  for (let j = 0; j < slots.length;) {
-    const q = slots[j], f = (KICKER_BY_FIRE && q.kick) || pi >= pieces.length ? null : pieces[pi++].f, kids = [q]
-    while (f && kids.length < SPLIT && j + kids.length < slots.length && slots[j + kids.length].L === q.L) kids.push(slots[j + kids.length])
-    j += kids.length
-    const g = { f, kids, dep: q.dep }, cam = cameraAt(X, T, g.dep), sa = storyOf(g.dep)
-    if (f) {
-      const p = pieceAt(N, im, f, sa)
-      g.sx = p.x * cam.k + cam.ox
-      g.sy = p.y * cam.k + cam.oy
-      X.depOf[f.id] = g.dep
-    } else { // an ember off the edge of the rock's fire, on the side facing its letter
-      const [rx, ry] = posAt(T, sa), RX = rx * cam.k + cam.ox, RY = ry * cam.k + cam.oy, dx = q.x - RX, dy = q.y - RY, dl = Math.hypot(dx, dy) || 1
-      const rim = T.ball * T.rr * cam.k * (1.15 + 0.5 * hash(q.j, 43))
-      g.sx = RX + (dx / dl) * rim
-      g.sy = RY + (dy / dl) * rim
-    }
-    // the flight: a cubic to each letter, bowed to one side; the halves of a split piece fork apart after SPLIT_AT
-    const ex = q.x - g.sx, ey = q.y - g.sy, el = Math.hypot(ex, ey) || 1, nx = -ey / el, ny = ex / el, bow = ARC * el * (hash(q.j, 44) < 0.5 ? -1 : 1) * (0.6 + 0.4 * hash(q.j, 45))
-    g.c1 = [g.sx + ex * 0.3 + nx * bow, g.sy + ey * 0.3 + ny * bow]
-    kids.forEach((kq, ci) => {
-      const fork = (ci - (kids.length - 1) / 2) * SPLIT_SPREAD * el
-      kq.c2 = [kq.x - ex * 0.3 + nx * (bow * 0.4 + fork), kq.y - ey * 0.3 + ny * (bow * 0.4 + fork)]
-      kq.land = g.dep + FLIGHT * (0.85 + 0.3 * hash(kq.j, 42))
-      kq.gone = DISPERSE_AT + DISPERSE_SPREAD * hash(kq.j, 51)
-      const hx = kq.x - X.hole[0], hy = kq.y - X.hole[1], hl = Math.hypot(hx, hy) || 1, sp = (hash(kq.j, 52) - 0.5) * 1.2
-      const ux = (0.6 * hx) / hl + sp, uy = (0.6 * hy) / hl - 0.8, ul = Math.hypot(ux, uy) || 1 // up, and away from the hole
-      kq.drift = [(ux / ul) * DRIFT * H * (0.5 + hash(kq.j, 53)), (uy / ul) * DRIFT * H * (0.5 + hash(kq.j, 53))]
-    })
-    X.groups.push(g)
-  }
-  return X
-}
 
 // The wide shot for the capture, { k, x, y }: on screen = k * scene + x, y. The loops the rock goes round from the end
 // of the pull back until it is gone (its centre, padded by the rock and its fire) and the arch over the hole, kept
@@ -216,7 +155,7 @@ export function createAbout(W, H, dpr, N, T, reduced) {
 function frameOf(T, W, H) {
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
   for (let sa = storyOf(PULL_AT + PULL); sa <= GONE; sa += 0.005) {
-    const [x, y] = posAt(T, sa)
+    const { x, y } = pathAt(T, sa)
     x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
   }
   const pad = 1.3 * T.ball * T.rr, cx = T.P.cx, cy = T.P.cy, mx = FRAME_MARGIN_X * W, my = FRAME_MARGIN * H
@@ -226,19 +165,204 @@ function frameOf(T, W, H) {
   return { k, x: W / 2 - k * cx, y: lo <= hi ? Math.min(hi, Math.max(lo, cy * (1 - k))) : (H - k * (top + bot)) / 2 }
 }
 
-// How much of each of the name's pieces is still the name's at scroll s (0: it has gone to its letter), for name.js
-// drawName; null before any has gone
-export function awayOf(X, s) {
-  if (s < BUILD_FROM || !X) return null
-  const fade = X.reduced ? FLIGHT : 0.02
-  return (id) => (id < X.depOf.length ? 1 - smooth((s - X.depOf[id]) / fade) : 1)
+// Lay the text out for this screen and work out the writing: where the rock's track runs, when each line types and
+// each letter locks, and which of the name's pieces wait for which letters. W, H, dpr: the screen; N: the name (name.js
+// createName); T: the asteroid (asteroid.js createAsteroid); reduced: prefers reduced motion; copy: the text
+export function createAbout(W, H, dpr, N, T, reduced, copy = ABOUT) {
+  const tall = W < H, snap = (v) => Math.round(v * dpr) / dpr
+  const [cv, x] = canvas(Math.round(W * dpr), Math.round(H * dpr))
+  const [glow, gx] = canvas(Math.max(1, Math.round(W / 3)), Math.max(1, Math.round(H / 3)))
+  const X = { W, H, dpr, reduced, cv, x, glow, gx, slots: [], sink: 0, pieces: [], k: WRITE_ZOOM, frame: frameOf(T, W, H) }
+  const R = T.ball * T.rr * X.k, clear = FIRE_CLEAR * R // the rock close up, its radius; how far the text keeps from its centre
+  // the rock as the writing starts (the camera has pushed in round it there) and the way it falls: its track's start and way
+  const P0 = pathAt(T, storyOf(WRITE_FROM), 0), dl = Math.hypot(P0.tx, Math.max(0.3, P0.ty))
+  X.start = [P0.x, P0.y]
+  X.dir = [P0.tx / dl, Math.max(0.3, P0.ty) / dl]
+
+  // the copy laid out at font size fs between left and right from top: its rows, and where it ends
+  const lay = (fs, top, left, right, gap = LINE_GAP) => {
+    x.font = `500 ${fs}px ${MONO}`
+    const cw = x.measureText('M').width, lh = fs * gap, cols = Math.max(12, Math.min(MAX_COLS, Math.floor((right - left) / cw)))
+    const rows = [{ y: top, kick: true, str: copy.kicker }], words = copy.text.split(/\s+/).filter(Boolean)
+    let y = top + lh * (1 + KICKER_GAP), i = 0
+    while (i < words.length) {
+      let str = words[i++]
+      while (i < words.length && str.length + 1 + words[i].length <= cols) str += ' ' + words[i++]
+      rows.push({ y, kick: false, str })
+      y += lh
+    }
+    return { fs, cw, lh, rows, left, top, bottom: rows.at(-1).y + lh / 2 }
+  }
+  const fs0 = Math.round(Math.max(FONT_MIN, Math.min(FONT_MAX, W / (tall ? 26 : 56), H / 34))), floor = H * (1 - TEXT_BOTTOM)
+  const right = tall ? W * (1 - TEXT_SIDE_TALL) : W * (1 - TEXT_RIGHT)
+  // wide screens: a block beside the rock's path, its left edge clear of the rock where it passes the top line (it falls away left from there)
+  const left = tall ? W * TEXT_SIDE_TALL : Math.min(right - 12 * fs0 * 0.6, Math.max(right - TEXT_MAX_W * W, X.start[0] + clear))
+  const top = tall ? Math.min(X.start[1], TEXT_TOP_TALL * H) : X.start[1]
+  let L
+  for (let fs = fs0; fs >= FONT_MIN; fs--) { // as big as fits above the floor
+    L = lay(fs, top, left, right)
+    if (L.bottom <= floor) break
+  }
+  if (L.bottom > floor) L = lay(L.fs, top, left, right, LINE_GAP_MIN) // still too long: tighter lines
+  if (L.bottom > floor) L = lay(L.fs, Math.max(0.05 * H + L.lh / 2, top - (L.bottom - floor)), left, right, LINE_GAP_MIN) // and then it starts higher
+  X.font = `500 ${L.fs}px ${MONO}`
+  X.fs = L.fs
+  L.rows.forEach((r, li) => [...r.str].forEach((ch, col) => {
+    if (ch !== ' ') X.slots.push({ ch, kick: r.kick, L: li, col, x: snap(L.left + (col + 0.5) * L.cw), y: snap(r.y), j: X.slots.length })
+  }))
+  X.cw = L.cw
+  X.lh = L.lh
+  X.rock = R
+  X.cell = [T.A.CW, T.A.CH] // the hole's letter grid, which the asteroid's fire and trail are drawn on
+  X.tailFont = T.A.font
+
+  // the writing: each line types itself, left to right over LINE_SWEEP, the lines spread down the writing by their
+  // height; the rock goes down its track so that it has passed each line (by `lag`, if the text is across its path)
+  // as the line starts, and never slower than V_MIN
+  const lag = tall ? clear : 0, y0 = L.rows[0].y, yn = L.rows.at(-1).y, T1 = WRITE_TO - LINE_SWEEP, [, dy] = X.dir
+  for (const r of L.rows) r.t = WRITE_FROM + (yn > y0 ? (r.y - y0) / (yn - y0) : 0) * (T1 - WRITE_FROM)
+  X.r0 = Math.max(0, (y0 + lag - X.start[1]) / dy)
+  X.v = Math.max(V_MIN * H, ((yn + lag - X.start[1]) / dy - X.r0) / (T1 - WRITE_FROM))
+  // it dissolves nearest the rock first (the tail takes those first, and they are the ones nearest the hole as it rises)
+  const [kx, ky] = trackAt(X, CLEAR_AT), dist = X.slots.map((q) => Math.hypot(q.x - kx, q.y - ky)), d0 = Math.min(...dist), d1 = Math.max(...dist)
+  X.slots.forEach((q, i) => {
+    const r = L.rows[q.L]
+    q.at = r.t + (LINE_SWEEP * q.col) / Math.max(1, r.str.length - 1) // it locks
+    q.gone = CLEAR_AT + (CLEAR_SPREAD * (dist[i] - d0)) / Math.max(1, d1 - d0)
+  })
+  // each line's box for the knockout (the kicker's runs down to the paragraph), and when it parts and closes again
+  X.rows = L.rows.map((r, i) => ({ t: r.t, gone: Math.min(...X.slots.filter((q) => q.L === i).map((q) => q.gone)),
+    x0: L.left - 0.5 * L.cw, x1: L.left + (r.str.length + 0.5) * L.cw, y0: r.y - L.lh / 2, y1: i + 1 < L.rows.length && r.kick ? L.rows[i + 1].y - L.lh / 2 : r.y + L.lh / 2 }))
+  const fx = FRAY * X.cell[0], fy = FRAY * X.cell[1]
+  X.bbox = [Math.min(...X.rows.map((r) => r.x0)) - fx, X.rows[0].y0 - fy, Math.max(...X.rows.map((r) => r.x1)) + fx, X.rows.at(-1).y1 + fy]
+
+  // the hole sinks while the camera is in, as far as keeps the written text above its light (worked out with it unsunk)
+  let sink = 0
+  for (let s = WRITE_FROM; s <= CLEAR_AT + 0.02; s += 0.02) {
+    const c = cameraAt(X, T, s), hx = T.P.cx * c.kf + c.fox, hy = T.P.cy * c.kf + c.foy, hr = T.P.R * c.kf, f = Math.max(0.05, sunk(s))
+    for (const q of X.slots) if (q.at - SCRAMBLE <= s) sink = Math.max(sink, (q.y + 0.6 * L.fs + HOLE_CLEAR * H - (hy - holeTop((q.x - hx) / hr) * hr)) / f)
+  }
+  X.sink = sink
+  if (reduced) return X
+
+  // a few of the name's pieces, spread through the text in the order it is written, each waiting for one letter
+  const order = X.slots.slice().sort((a, b) => a.at - b.at), all = piecesOf(N, T.impact)
+  const n = Math.min(tall ? PIECES_TALL : PIECES, all.length, order.length)
+  all.sort((a, b) => hash(a.id, 81) - hash(b.id, 81))
+  for (let i = 0; i < n; i++) {
+    const q = order[Math.floor(((i + 0.5) * order.length) / n)], f = all[i]
+    X.pieces[f.id] = { q, cs: WHIP_FROM + (WHIP_TO - WHIP_FROM) * (0.8 * (i / n) + 0.2 * hash(f.id, 82)), wx: q.x + WAIT_CELLS * L.cw }
+  }
+  return X
+}
+
+// How the name's pieces are whipped across at scroll s, for name.js drawShatter (see there); null before they are
+export function steerOf(X, T, s) {
+  if (!X || s <= WHIP_FROM) return null
+  const gone = 1 - smooth((s - WHIP_FROM) / WHIP) // the pieces not wanted fade away
+  if (X.reduced) { // the pieces fade out as the text fades in
+    const left = 1 - smooth((s - WRITE_FROM) / 0.2)
+    return (id, copy) => (copy ? -1 : left)
+  }
+  return (id, copy, o) => {
+    const P = X.pieces[id]
+    if (!P) return copy ? -1 : gone
+    const sg = s - copy * STREAK, u = (sg - P.cs) / WHIP
+    if (u <= 0) return -1
+    // where it is on screen: waiting level with its letter, a few cells right of it, then sliding into it as it locks
+    const cap = smoother(u), w = smoother((sg - P.q.at + SLIDE) / SLIDE), sx = P.wx + (P.q.x - P.wx) * w, c = cameraAt(X, T, sg)
+    o[0] += ((sx - c.ox) / c.k - o[0]) * cap // back into the scene, as the camera then saw it
+    o[1] += ((P.q.y - c.oy) / c.k - o[1]) * cap
+    o[2] = cap
+    o[3] = 1 - cap // upright as it waits
+    o[4] = 1 - (1 - WAIT_SIZE) * cap - 0.6 * WAIT_SIZE * w // small as it waits, smaller as it lands
+    return (1 - (1 - WAIT_ALPHA) * cap) * (1 - smooth(w)) // dim as it waits, gone as its letter locks
+  }
+}
+
+// Which of the asteroid's glyph cells to leave out under the text at scroll s, for asteroid.js put(): (x, y) css px ->
+// 0..1, the chance a cell there is left out: KNOCKOUT under each line once it is being written, thinning to none over
+// FRAY of the hole's cells past it, and closing again as the line dissolves. null when nothing is (KNOCKOUT 0: never)
+export function knockOf(X, s) {
+  if (!X || KNOCKOUT <= 0 || s < WRITE_FROM - SCRAMBLE || s > CLEAR_AT + CLEAR_SPREAD + DISSOLVE) return null
+  const live = X.rows.map((r) => KNOCKOUT * smooth((s - r.t + SCRAMBLE) / LINE_SWEEP) * (1 - smooth((s - r.gone) / (0.5 * DISSOLVE))))
+  if (!live.some((m) => m > 0)) return null
+  const [cw, ch] = X.cell, [bx0, by0, bx1, by1] = X.bbox
+  return (x, y) => {
+    if (x < bx0 || x > bx1 || y < by0 || y > by1) return 0
+    let k = 0
+    for (let i = 0; i < live.length; i++) {
+      const r = X.rows[i], d = Math.max(Math.max(r.x0 - x, x - r.x1, 0) / cw, Math.max(r.y0 - y, y - r.y1, 0) / ch)
+      if (live[i] > 0 && d < FRAY) k = Math.max(k, live[i] * (1 - d / FRAY))
+    }
+    return k
+  }
+}
+
+// The tail on screen at scroll s: the rock's own path back from it (where its trail is), TAIL_N points every TAIL_STEP
+// screen heights, [x0, y0, x1, y1, ...], back the way the rock came; pts.safe: the first point from which all of it is
+// HOLE_KEEP clear of the hole (near the rock it can be close to it, once the rock is falling in)
+const TAIL_N = 64, TAIL_STEP = 0.033
+function tailAt(X, T, s, cam) {
+  const sa = storyOf(s), step = TAIL_STEP * X.H, pts = new Float64Array(2 * (TAIL_N + 1))
+  const hx = T.P.cx * cam.kf + cam.fox, hy = T.P.cy * cam.kf + cam.foy, keep = HOLE_KEEP * T.P.R * cam.kf
+  pts.safe = TAIL_N + 1
+  pts.hole = [hx, hy, T.P.R * cam.kf]
+  for (let i = TAIL_N; i >= 0; i--) {
+    const P = pathAt(T, sa, (i * step) / cam.k), x = P.x * cam.k + cam.ox, y = P.y * cam.k + cam.oy
+    pts[2 * i] = x
+    pts[2 * i + 1] = y
+    if (pts.safe === i + 1 && Math.hypot(x - hx, y - hy) > keep) pts.safe = i
+  }
+  return pts
+}
+// Letter q's glyphs, r into its dissolve, with the tail where tail (tailAt) has it: each starts in the letter's place, is
+// drawn into the tail where it passes nearest, and streams away down it, hot and blue as it joins, cooling and fading.
+// cb(x, y, glyph, rgb, alpha)
+function motes(X, q, r, tail, cb) {
+  const base = q.kick ? KICKER_RGB : TEXT_RGB, step = TAIL_STEP * X.H
+  for (let m = 0; m < MOTES; m++) {
+    const g = q.j * MOTES + m, rm = r - 0.08 * hash(g, 93) // a little apart
+    if (rm <= 0 || rm >= 1) continue
+    const sx = q.x + (hash(g, 94) - 0.5) * 0.6 * X.cw, sy = q.y + (hash(g, 95) - 0.5) * 0.5 * X.lh
+    let near = -1, best = Infinity // where the tail passes nearest it, clear of the hole and by a way clear of it too, then on down the tail
+    const [cx, cy, cr] = tail.hole, keep = PATH_KEEP * cr
+    for (let i = Math.max(tail.safe, Math.ceil((1.2 * X.rock) / step)); i <= TAIL_N; i++) { // behind the rock's edge
+      const ax = tail[2 * i] - sx, ay = tail[2 * i + 1] - sy, d = ax * ax + ay * ay
+      if (d >= best) continue
+      const u = Math.min(1, Math.max(0, ((cx - sx) * ax + (cy - sy) * ay) / (d || 1)))
+      if (Math.hypot(sx + ax * u - cx, sy + ay * u - cy) < keep) continue
+      best = d
+      near = i
+    }
+    const stay = near < 0 // nowhere it can get to clear of the hole: it fades where it is
+    if (stay) near = 0
+    const flow = Math.max(0, (rm - JOIN[0] - JOIN[1]) / (1 - JOIN[0] - JOIN[1])) // first to the tail, by the way checked above; only then down it
+    const b = Math.min(TAIL_N - 1e-6, near + (FLOW * X.H * flow * flow) / step), i = Math.floor(b), f = b - i
+    const x0 = tail[2 * i], y0 = tail[2 * i + 1], dx = tail[2 * i + 2] - x0, dy = tail[2 * i + 3] - y0, dl = Math.hypot(dx, dy) || 1, off = (hash(g, 97) - 0.5) * 2 * IN_TAIL * X.rock
+    const j = stay ? 0 : smoother((rm - JOIN[0]) / JOIN[1]), tx = x0 + dx * f - (dy / dl) * off, ty = y0 + dy * f + (dx / dl) * off, ux = dx / dl, uy = dy / dl
+    const stage = rm < 0.35 ? 0 : rm < 0.65 ? 1 : 2, pick = hash(g, 96 + stage) // the glyph: dense, then strokes, then dust
+    const glyph = stage === 0 ? POOLS[3][Math.floor(pick * POOLS[3].length)] : stage === 1 ? (pick < 0.5 ? stroke(ux, uy) : POOLS[1][Math.floor(pick * 2 * POOLS[1].length) % POOLS[1].length]) : DUST[Math.floor(pick * DUST.length)]
+    const cool = smooth((rm - 0.2) / 0.8), c = rm < 0.2 ? mix(base, BLUE[4], smooth(rm / 0.2)) : mix(BLUE[4], BLUE[2], cool)
+    const end = 1 - smooth((b - TAIL_N + 6) / 5) // never piling up where the sampled tail stops
+    cb(sx + (tx - sx) * j, sy + (ty - sy) * j, glyph, c, smooth(rm / 0.06) * (0.75 + 0.35 * j) * (1 - smooth((rm - 0.55) / 0.45)) * end)
+  }
+}
+// every glyph the dissolving text is in at scroll s: [[x, y], ...] (css px), for a check that none goes near the hole
+export function motesAt(X, T, s, cam) {
+  const out = []
+  if (X.reduced || s <= CLEAR_AT) return out
+  const tail = tailAt(X, T, s, cam)
+  for (const q of X.slots) motes(X, q, (s - q.gone) / DISSOLVE, tail, (px, py) => out.push([px, py]))
+  return out
 }
 
 // ---------------- drawing ----------------
-// Over everything: the text, as far as the scroll s has built it, and the glyphs on their way to it. t: the clock
-export function drawAbout(ctx, X, s, t) {
-  if (s < BUILD_FROM || s > DISPERSE_AT + DISPERSE_SPREAD + DISPERSE) return
-  const { x, dpr, W, H } = X, step = Math.floor(t * FLIGHT_RATE), red = X.reduced
+// Over everything: the text, as far as the rock has written it at scroll s, and as it dissolves into the tail. T: the
+// asteroid's layout; cam: the camera now (cameraAt)
+export function drawAbout(ctx, X, T, s, cam) {
+  if (s < WRITE_FROM - SCRAMBLE || s > CLEAR_AT + CLEAR_SPREAD + 1.1 * DISSOLVE) return
+  const { x, dpr, W } = X
   x.setTransform(1, 0, 0, 1, 0, 0)
   x.globalCompositeOperation = 'source-over'
   x.globalAlpha = 1
@@ -253,47 +377,36 @@ export function drawAbout(ctx, X, s, t) {
     x.fillStyle = `rgba(${c},${Math.min(1, a).toFixed(3)})`
     x.fillText(ch, px, py)
   }
-  for (const g of X.groups) {
-    if (s < g.dep) continue
-    g.kids.forEach((q, ci) => {
-      const base = q.kick ? KICKER_RGB : TEXT_RGB, f = (s - g.dep) / (q.land - g.dep)
-      if (red) { // reduced motion: it fades in where it lands, and out where it was
-        put(q.ch, q.x, q.y, base, smooth(f) * (1 - smooth((s - q.gone) / DISPERSE)))
-        return
-      }
-      if (f < 1) { // in flight: scrambling, then ticking up to its letter as it arrives, a fading trail behind it
-        for (let k = 0; k < GHOST.length; k++) {
-          const fk = f - k * GHOST_GAP * 1.5
-          if (fk <= 0 || (ci && fk < SPLIT_AT)) break // a split piece's other half rides with the first until it splits
-          const u = ease(fk), px = bez(g.sx, g.c1[0], q.c2[0], q.x, u), py = bez(g.sy, g.c1[1], q.c2[1], q.y, u)
-          const ch = fk < 0.8 ? SCRAMBLE[Math.floor(hash(q.j * 4 + k, step) * SCRAMBLE.length)] : RAMP[Math.min(4, Math.floor(((fk - 0.8) / 0.2) * 5))]
-          put(ch, px, py, mix(HOT_RGB, ICE_RGB, smooth(fk / 0.7)), GHOST[k] * smooth(fk / 0.04) * (k ? 0.8 : 1.15))
-        }
-        if (ci === 1 && f > SPLIT_AT && f < SPLIT_AT + 0.1) { // the spark where it splits
-          const u = ease(SPLIT_AT)
-          put('*', bez(g.sx, g.c1[0], q.c2[0], q.x, u), bez(g.sy, g.c1[1], q.c2[1], q.y, u), HOT_RGB, 1 - (f - SPLIT_AT) / 0.1)
-        }
-        return
-      }
-      // landed: locked to its letter, cooling from white hot to its own colour; then it burns out and drifts off
-      const hot = Math.exp(-(s - q.land) / (0.35 * LAND_COOL)) * (1 - smooth((s - q.land) / LAND_COOL))
-      const r = c01((s - q.gone) / DISPERSE)
-      if (r <= 0) {
-        put(q.ch, q.x, q.y, mix(base, HOT_RGB, hot), 1 + 0.4 * hot)
-        return
-      }
-      const e = 1 - Math.exp(-3 * r), ch = r < 0.3 ? q.ch : r < 0.5 ? '*' : r < 0.7 ? '+' : r < 0.85 ? "'" : '.'
-      put(ch, q.x + q.drift[0] * e, q.y + q.drift[1] * e, mix(base, EMBER_RGB, smooth(r / 0.4)), 1 - smooth(r))
-    })
+  const tail = !X.reduced && s > CLEAR_AT ? tailAt(X, T, s, cam) : null, bits = []
+  for (const q of X.slots) {
+    const base = q.kick ? KICKER_RGB : TEXT_RGB, a = s - q.at, r = (s - q.gone) / DISSOLVE
+    if (X.reduced) { // it fades in where it lands, line by line, and out where it was
+      put(q.ch, q.x, q.y, base, smooth((a + 0.1) / 0.1) * (1 - smooth(r)))
+      continue
+    }
+    if (a < -SCRAMBLE || r >= 1.1) continue // (its glyphs leave up to 0.08 apart)
+    if (a < 0) { // scrambling in its place, dim: a few glyphs, then it locks
+      const k = Math.min(SWAPS - 1, Math.floor(((a + SCRAMBLE) / SCRAMBLE) * SWAPS))
+      put(SCRAMBLE_SET[Math.floor(hash(q.j * 7 + k, 91) * SCRAMBLE_SET.length)], q.x, q.y, base, SCRAMBLE_ALPHA * smooth((a + SCRAMBLE) / (0.3 * SCRAMBLE)))
+      continue
+    }
+    const c = mix(base, HOT_RGB, 1 - smooth(a / COOL)) // locked: white hot, cooling to its colour
+    if (r <= 0) {
+      put(q.ch, q.x, q.y, c, 1)
+      continue
+    }
+    if (r < BREAK) put(q.ch, q.x, q.y, c, 1 - smooth(r / BREAK)) // the type breaking up
+    motes(X, q, r, tail, (px, py, g, rgb, al) => bits.push(px, py, g, rgb, al)) // into the tail's glyphs
+    motes(X, q, r - SMEAR / DISSOLVE, tail, (px, py, g, rgb, al) => bits.push(px, py, g, rgb, 0.3 * al)) // a faint copy behind each
   }
-  // the dimmed patch behind the text, then the text, then its bloom
-  const up = smooth((s - BUILD_FROM) / 0.3) * (1 - smooth((s - DISPERSE_AT) / (DISPERSE_SPREAD + DISPERSE)))
+  if (bits.length) {
+    x.font = X.tailFont
+    for (let i = 0; i < bits.length; i += 5) put(bits[i + 2], bits[i], bits[i + 1], bits[i + 3], bits[i + 4])
+  }
+  // the text, then its bloom
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.globalCompositeOperation = 'source-over'
-  ctx.globalAlpha = BACKDROP * up
-  if (ctx.globalAlpha > 0.005) ctx.drawImage(X.back, 0, 0, W, H)
-  ctx.globalAlpha = 1
-  ctx.drawImage(X.cv, 0, 0, W, H)
+  ctx.drawImage(X.cv, 0, 0, W, X.H)
   const { glow, gx } = X
   gx.clearRect(0, 0, glow.width, glow.height)
   gx.filter = 'blur(3px)'
@@ -301,7 +414,7 @@ export function drawAbout(ctx, X, s, t) {
   gx.filter = 'none'
   ctx.globalCompositeOperation = 'lighter'
   ctx.globalAlpha = GLOW
-  ctx.drawImage(glow, 0, 0, W, H)
+  ctx.drawImage(glow, 0, 0, W, X.H)
   ctx.globalAlpha = 1
   ctx.globalCompositeOperation = 'source-over'
 }

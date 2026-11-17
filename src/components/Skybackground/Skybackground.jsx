@@ -6,14 +6,14 @@ import { createLensing } from './lensing'
 import { createArt, drawArt, composeArt } from './ascii'
 import { createName, drawName, nameMoving, REVEAL_END } from './name'
 import { createAsteroid, drawAsteroidUnder, drawAsteroidOver, impactOf, asteroidBusy } from './asteroid'
-import { createAbout, drawAbout, cameraAt, storyOf, farOf, awayOf, ROOM_END, ABOUT } from './about'
+import { createAbout, drawAbout, cameraAt, storyOf, farOf, steerOf, knockOf, ROOM_END, ABOUT } from './about'
 import './Skybackground.css'
 
 const FPS = 30 // redraws a second: the letters and the sky's motion are both slow enough; scrolling, the shock front and the name coming out redraw every frame
 const SPEED = 1.75 // how fast the clock runs: 2 = twice as fast, 0.5 = half
 const SWAY_X = 14, SWAY_Y = 9 // how far the whole sky sways, in px
 const MOVE_ROOM = 1 // screens of scroll, after the intro, that take the hole down to its resting place
-const ROOM = Math.max(MOVE_ROOM, REVEAL_END, ROOM_END) // the page's scroll room, in screens: the hole settles, the name comes out of it (name.js), the asteroid smashes it, the camera pushes in while its pieces become the about-me (about.js), then the asteroid spirals into the hole (asteroid.js)
+const ROOM = Math.max(MOVE_ROOM, REVEAL_END, ROOM_END) // the page's scroll room, in screens: the hole settles, the name comes out of it (name.js), the asteroid smashes it and, falling on, writes the about-me (about.js), then the asteroid spirals into the hole (asteroid.js)
 const SCROLL_EASE = 8 // how quickly the hole catches up with the scroll, per second: higher follows tighter, lower glides more
 const SKIP_INTRO = true // TEMPORARY, for tuning: start at the end of the intro, hole already where the scroll puts it. Set false to get the intro back
 
@@ -119,13 +119,13 @@ export default function Skybackground() {
       // the name goes under the gas, and whatever of the asteroid is behind the hole; the rest of the asteroid over it.
       // reduced motion: no sweep over the landed name, and the rock's tumble, its fire and its gas hold still
       // the asteroid and the name's pieces run on the story's own time, which slows while the camera is in (about.js)
-      const ta = reduced ? INTRO_END : t, sa = storyOf(sS)
+      const ta = reduced ? INTRO_END : t, sa = storyOf(sS), knock = knockOf(ab, sS) // knock: the field parts round the about-me
       composeArt(ctx, art, t, lensed, () => {
-        drawName(ctx, line, h, sa, reduced ? null : t, impactOf(ast, sa), cam, awayOf(ab, sS))
-        drawAsteroidUnder(ctx, ast, h, sa, ta, cam)
+        drawName(ctx, line, h, sa, reduced ? null : t, impactOf(ast, sa), cam, steerOf(ab, ast, sS))
+        drawAsteroidUnder(ctx, ast, h, sa, ta, cam, knock)
       }, () => {
-        drawAsteroidOver(ctx, ast, h, sa, ta, cam)
-        drawAbout(ctx, ab, sS, ta)
+        drawAsteroidOver(ctx, ast, h, sa, ta, cam, knock)
+        drawAbout(ctx, ab, ast, sS, cam)
       })
     }
 
@@ -155,7 +155,7 @@ export default function Skybackground() {
       if (sS !== target) sS = Math.abs(target - sS) < 2e-4 ? target : sS + (target - sS) * (1 - Math.exp(-dt * SCROLL_EASE))
       if (sS !== prev) cam = cameraAt(ab, ast, sS)
       // the hole moves over the first MOVE_ROOM screens, and while the camera does
-      const moving = Math.min(sS, MOVE_ROOM) !== was || (cam !== wasCam && (cam.kf !== 1 || wasCam.kf !== 1))
+      const moving = Math.min(sS, MOVE_ROOM) !== was || cam.kf !== wasCam.kf || cam.fox !== wasCam.fox || cam.foy !== wasCam.foy
       const h = holeAt(t), rv = reveal(t, W, H, S)
       // the letters update FPS times a second, and on every frame while the hole is moving
       const update = moving || acc >= 1 / FPS - 0.004

@@ -71,7 +71,7 @@ const TRAIL_HOT = 0.35 // how far back it stays hot before cooling to red dust, 
 const SPARKS = 110 // glyph sparks it sheds on the way in
 const SPARKS_UNTIL = HIT + 0.3 // screens of scroll: it stops shedding them here
 const BLUE_FIRE = true // experiment: blue flames, trail and sparks instead of the hole's orange (false = back to orange)
-const BLUE = [[18, 36, 130], [36, 84, 215], [64, 145, 255], [145, 205, 255], [225, 244, 255]] // their colours, coolest to hottest: deep, blue, azure, ice, white hot
+export const BLUE = [[18, 36, 130], [36, 84, 215], [64, 145, 255], [145, 205, 255], [225, 244, 255]] // their colours, coolest to hottest: deep, blue, azure, ice, white hot
 const GLOWS = [[4, 1.2, 1], [8, 2.6, 0.8]] // the fire's glow: [shrink factor, blur px, strength], like the hole's (ascii.js)
 
 const PHONE = 700, DEEP = 0, RED = 1, ORANGE = 2, AMBER = 3, HOT = 4, TAU = 2 * Math.PI, TORN = 4096, BACK = 8192 // bucket keys: + TORN for the torn glyphs, + BACK for the layer behind the hole
@@ -249,6 +249,8 @@ function stateAt(T, s, F) {
 }
 const wbOf = (d) => smooth(0.5 - d / DEPTH_SOFT)
 
+// the point back px behind it along its path at scroll s (the way its tail goes): { x, y, tx, ty (the way it goes) }, css px
+export const pathAt = (T, s, back = 0) => pointAt(T, arcOf(T, s) - back, {})
 // where it is at scroll s: [x, y] of its centre in css px
 export function posAt(T, s) {
   const F = stateAt(T, s, {})
@@ -347,8 +349,13 @@ function contacts(T, N) {
 
 // ---------------- the glyphs ----------------
 // one glyph into its colour's bucket: heat picks the palette step the way the hole's maths does (deep red ..
-// hot white), lum its brightness; ch is a character; back: the layer behind the hole
+// hot white), lum its brightness; ch is a character; back: the layer behind the hole. Under the about-me's text some
+// cells are left out (T.knock: about.js knockOf), cell by cell on the hole's grid, so the field parts round the type
 function put(T, ch, x, y, heat, lum, back, torn = 0) {
+  if (T.knock) {
+    const k = T.knock(x, y)
+    if (k > 0 && hash(Math.floor(x / T.A.CW) + 7919, Math.floor(y / T.A.CH) + 104729) < k) return
+  }
   const tag = heat < 0.1 ? DEEP : heat < 0.2 ? RED : heat < 0.45 ? ORANGE : heat < 0.75 ? AMBER : HOT
   const key = back * BACK + torn * TORN + tag * 512 + Math.max(0, Math.min(511, Math.round(lum * 300)))
   let b = T.buckets.get(key)
@@ -363,9 +370,9 @@ function putD(T, ch, x, y, heat, lum, wb, torn = 0) {
   if (wb > 0.001) put(T, ch, x, y, heat, lum * wb, 1, torn)
 }
 const poolOf = (v) => (v < 0.14 ? 0 : v < 0.34 ? 1 : v < 0.58 ? 2 : 3) // brighter = denser glyph, the hole's pools
-const DUST = ".,:'`"
+export const DUST = ".,:'`"
 // a stroke along direction (dx, dy): - / | \
-function stroke(dx, dy) {
+export function stroke(dx, dy) {
   const a = ((Math.atan2(-dy, dx) * 180) / Math.PI + 360) % 180
   return a < 22.5 || a >= 157.5 ? '-' : a < 67.5 ? '/' : a < 112.5 ? '|' : '\\'
 }
@@ -516,10 +523,12 @@ function blueOf(key) {
 // ---------------- drawing ----------------
 // This frame, worked out once for drawAsteroidUnder and drawAsteroidOver: where it is (T.F), and all its glyphs (fire,
 // trail, sparks, torn glyphs) drawn into the front layer and the one behind the hole, each with its glow
-function prep(T, s, t, cam) {
+function prep(T, s, t, cam, knock) {
   const F = T.F
-  if (F.s === s && F.t === t && F.cam === cam) return F
+  if (F.s === s && F.t === t && F.cam === cam && F.knock === knock) return F
   T.cam = cam
+  T.knock = knock
+  F.knock = knock
   view(T, stateAt(T, s, F))
   F.t = t
   F.cam = cam
@@ -531,6 +540,7 @@ function prep(T, s, t, cam) {
   F.front = render(T, 0)
   F.back = render(T, 1)
   T.cam = NO_CAM // the rest of the time (contacts, the impact) it works in the scene
+  T.knock = null
   return F
 }
 // one layer's glyphs onto its canvas, then its glow; the one behind has what the hole hides cut out of it first
@@ -615,10 +625,11 @@ function drawRock(c, T, F, h, s, t, vis) {
 
 // Under the gas (after the name): whatever of it is behind the hole, with what the hole hides cut out, so the shadow
 // and the disk's gas are in front of it. h: the hole on screen; s: the story's scroll in screens (about.js storyOf);
-// t: the clock (fixed under reduced motion); cam: the camera it is seen through (about.js cameraAt)
-export function drawAsteroidUnder(ctx, T, h, s, t, cam = NO_CAM) {
+// t: the clock (fixed under reduced motion); cam: the camera it is seen through (about.js cameraAt); knock: which cells
+// to leave out under the about-me's text (about.js knockOf), or null
+export function drawAsteroidUnder(ctx, T, h, s, t, cam = NO_CAM, knock = null) {
   if (!(s > ENTER && s < END) || cam.a <= 0) return
-  const F = prep(T, s, t, cam)
+  const F = prep(T, s, t, cam, knock)
   if (F.wb > 0.002 && F.sz >= 0.02) {
     if (!T.rk) T.rk = canvas(T.cv.width, T.cv.height)
     const [rk, x] = T.rk
@@ -637,9 +648,9 @@ export function drawAsteroidUnder(ctx, T, h, s, t, cam = NO_CAM) {
   ctx.setTransform(T.dpr, 0, 0, T.dpr, 0, 0)
 }
 // Over the gas: whatever of it is in front of the hole; the rock hides what is behind it, its fire's light goes over
-export function drawAsteroidOver(ctx, T, h, s, t, cam = NO_CAM) {
+export function drawAsteroidOver(ctx, T, h, s, t, cam = NO_CAM, knock = null) {
   if (!(s > ENTER && s < END) || cam.a <= 0) return
-  const F = prep(T, s, t, cam), vis = smooth((s - ENTER) / FADE_IN) * cam.a
+  const F = prep(T, s, t, cam, knock), vis = smooth((s - ENTER) / FADE_IN) * cam.a
   drawRock(ctx, T, F, h, s, t, vis * (1 - F.wb))
   if (F.front) addLayer(ctx, T, T.cv, T.glows, vis)
   ctx.setTransform(T.dpr, 0, 0, T.dpr, 0, 0)
