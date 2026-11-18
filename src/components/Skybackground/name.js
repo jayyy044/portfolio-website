@@ -14,6 +14,8 @@ const NAME = 'maanas' // the part of the line drawn in NAME_RGB
 export const REVEAL_START = 0.85 // screens of scroll where the streams start (the hole has nearly settled by then)
 export const REVEAL_END = 2.1 // and where the line has landed
 const FONT_MIN = 18, FONT_MAX = 64 // the line's font size, px; in between it follows the screen's width and height
+const BIG_W = 1920, BIG_H = 1080 // on screens bigger than this both ways the top sizes of the text (FONT_MAX here and in about.js) grow with
+// the screen, so they look like this one scaled up
 const TEXT_RGB = [236, 232, 240] // the line
 const NAME_RGB = [255, 177, 90] // the name
 const HOT_RGB = [255, 212, 154] // a letter as it lands, before it cools to its own colour
@@ -25,7 +27,7 @@ const GLOW_SWELL = 0.25 // how much more bloom there is mid-reveal
 const PARTICLES = 26, PARTICLES_PHONE = 14 // glyphs streaming into each letter; phones are screens under PHONE px wide
 const PHONE = 700
 const LAG = 0.68 // how far into the reveal the innermost letters start (the outer ends start first): 0 = all at once
-export const SCRAMBLE = ':;+=!xzcv*rtaeo0&%{}#@8B$QM' // what the streams are made of (and the glyphs torn off the asteroid, asteroid.js)
+const SCRAMBLE = ':;+=!xzcv*rtaeo0&%{}#@8B$QM' // what the streams are made of
 const SCRAMBLE_RATE = 14 // how often each stream glyph changes, a second
 // the sweep over the landed line; times are on the intro clock, so SPEED scales them (at 1.75, 4.2 is about 2.4 s)
 const SWEEP_EVERY = 4.2 // from one sweep to the next
@@ -62,7 +64,7 @@ const IMPACT_FLASH_RGB = [214, 232, 255] // its outer colour (white at its heart
 
 const MONO = '"JetBrains Mono", Menlo, Consolas, monospace'
 const RAMP = ['.', ':', '+', '*', '#'] // the ticks a letter steps through before it lands
-export const GHOST = [1, 0.5, 0.27, 0.12], GHOST_GAP = 0.026 // a stream glyph's trail: how bright each copy is, and how far behind
+const GHOST = [1, 0.5, 0.27, 0.12], GHOST_GAP = 0.026 // a stream glyph's trail: how bright each copy is, and how far behind
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x)
 const ease = (x) => 1 - (1 - x) * (1 - x)
 const rgb = (c) => `rgb(${c})`
@@ -87,6 +89,9 @@ function canvas(w, h) {
   return [c, c.getContext('2d')]
 }
 
+// how much the top text sizes grow on this screen (BIG_W, BIG_H)
+export const bigger = (W, H) => Math.max(1, Math.min(W / BIG_W, H / BIG_H))
+
 // Lay the line out for this screen: centred, sized from the width and height, halfway between the
 // top of the screen and the top of the arch over the resting hole (B, from rest()). The measured
 // widths change once the font arrives, so Skybackground runs this again then.
@@ -94,7 +99,7 @@ export function createName(W, H, dpr, B) {
   const [cv, x] = canvas(Math.round(W * dpr), Math.round(H * dpr)) // the layer, redrawn on every frame it shows
   const [glow, gx] = canvas(Math.max(1, Math.round(W / 3)), Math.max(1, Math.round(H / 3)))
   const text = LINE.join(' ')
-  const fs = Math.round(Math.max(FONT_MIN, Math.min(FONT_MAX, (0.84 * W) / (text.length * 0.6), 0.07 * H + 8)))
+  const fs = Math.round(Math.max(FONT_MIN, Math.min(FONT_MAX * bigger(W, H), (0.84 * W) / (text.length * 0.6), 0.07 * H + 8)))
   const font = `500 ${fs}px ${MONO}`
   x.font = font
   const wTot = x.measureText(text).width, x0 = Math.round((W / 2 - wTot / 2) * dpr) / dpr

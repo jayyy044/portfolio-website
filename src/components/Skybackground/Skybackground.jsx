@@ -5,7 +5,7 @@ import { reveal, hole, rest, smooth, INTRO_END } from './blackhole'
 import { createLensing } from './lensing'
 import { createArt, drawArt, composeArt } from './ascii'
 import { createName, drawName, nameMoving, REVEAL_END } from './name'
-import { createAsteroid, drawAsteroidUnder, drawAsteroidOver, impactOf, asteroidBusy } from './asteroid'
+import { createAsteroid, drawAsteroidUnder, drawAsteroidOver, impactOf, asteroidBusy, ENTER } from './asteroid'
 import { createAbout, drawAbout, cameraAt, storyOf, farOf, steerOf, knockOf, ROOM_END, ABOUT } from './about'
 import './Skybackground.css'
 
@@ -15,10 +15,14 @@ const SWAY_X = 14, SWAY_Y = 9 // how far the whole sky sways, in px
 const MOVE_ROOM = 1 // screens of scroll, after the intro, that take the hole down to its resting place
 const ROOM = Math.max(MOVE_ROOM, REVEAL_END, ROOM_END) // the page's scroll room, in screens: the hole settles, the name comes out of it (name.js), the asteroid smashes it and, falling on, writes the about-me (about.js), then the asteroid falls into the hole (asteroid.js)
 const SCROLL_EASE = 8 // how quickly the hole catches up with the scroll, per second: higher follows tighter, lower glides more
-const SKIP_INTRO = true // TEMPORARY, for tuning: start at the end of the intro, hole already where the scroll puts it. Set false to get the intro back
+const STORY_SPEED = 1.2 // the fastest the asteroid's story plays (from its entrance to the end), in screens of scroll a second: scroll faster and it plays at this pace, catching up after, so the camera never whips; lower = calmer, Infinity = follows the scroll however fast
+const HINT_AFTER = 1 // the "scroll" hint at the bottom comes in this long after the intro ends, in clock seconds (SPEED)
+const HINT_FADE = 1.5 // and fades in over this long
+const HINT_GONE = 0.12 // screens of scroll that fade it out (it comes back at the top)
+const SKIP_INTRO = false // true, for tuning: start at the end of the intro, hole already where the scroll puts it
 
 // dev only: the sky is set up once, in an effect that hot updates don't re-run, so a knob edit
-// would change nothing on screen. Reload instead (the scroll position survives it)
+// would change nothing on screen. Reload instead (with SKIP_INTRO the scroll position survives it)
 import.meta.hot?.on('vite:beforeUpdate', () => location.reload())
 
 // Fixed full-screen canvas behind the page: the sky (ray-traced around the hole,
@@ -27,10 +31,12 @@ import.meta.hot?.on('vite:beforeUpdate', () => location.reload())
 export default function Skybackground() {
   const canvasRef = useRef(null)
   const probeRef = useRef(null)
+  const hintRef = useRef(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
     const probe = probeRef.current // 100svh: the short viewport, a phone's toolbar showing
+    const hint = hintRef.current
     const ctx = canvas.getContext('2d')
     const bg = document.createElement('canvas') // the flat sky's still parts
     const bctx = bg.getContext('2d')
@@ -41,8 +47,12 @@ export default function Skybackground() {
     const root = document.documentElement
     let locked = t < INTRO_END
     root.classList.toggle('locked', locked)
+    // the intro starts the story from the top, so the page does too: a reload would otherwise land mid-page
+    // and, the intro over, the story would play itself down to there. Skipping the intro, the reload keeps its place
+    history.scrollRestoration = locked ? 'manual' : 'auto'
+    if (locked) window.scrollTo(0, 0)
     let W = 0, H = 0, dpr = 1, S, nebula, stars, art, line, ast, ab, cam, raf, dprQuery, buildTimer
-    let last = 0, acc = 0, lastScroll = 0, flatReady = false
+    let last = 0, acc = 0, lastScroll = 0, flatReady = false, hintO = '0'
     let B, sS = 0 // the hole's resting place (rest()); the scroll it follows, eased, in screens
 
     // the hole at clock ti, as far toward its resting place as the eased scroll has taken it, seen through the camera
@@ -152,8 +162,15 @@ export default function Skybackground() {
       // after the intro the hole, then the name, follow the scroll, eased (at the same pace whatever the frame rate) so they glide
       const target = t >= INTRO_END ? Math.min(Math.max(scroll / H, 0), ROOM) : 0
       const prev = sS, was = Math.min(prev, MOVE_ROOM), wasCam = cam
-      if (sS !== target) sS = Math.abs(target - sS) < 2e-4 ? target : sS + (target - sS) * (1 - Math.exp(-dt * SCROLL_EASE))
+      if (sS !== target) {
+        const next = Math.abs(target - sS) < 2e-4 ? target : sS + (target - sS) * (1 - Math.exp(-dt * SCROLL_EASE))
+        // the asteroid's story no faster than STORY_SPEED: coming down to it, stop at its start; in it, at most that far a frame
+        sS = sS < ENTER ? Math.min(next, ENTER) : Math.min(Math.max(next, sS - STORY_SPEED * dt), sS + STORY_SPEED * dt)
+      }
       if (sS !== prev) cam = cameraAt(ab, ast, sS)
+      // the scroll hint: in once the intro is over, out as soon as the scroll moves
+      const o = (smooth((t - INTRO_END - HINT_AFTER) / HINT_FADE) * (1 - smooth(sS / HINT_GONE))).toFixed(3)
+      if (o !== hintO) hint.style.opacity = hintO = o
       // the hole moves over the first MOVE_ROOM screens, and while the camera does
       const moving = Math.min(sS, MOVE_ROOM) !== was || cam.kf !== wasCam.kf || cam.fox !== wasCam.fox || cam.foy !== wasCam.foy
       const h = holeAt(t), rv = reveal(t, W, H, S)
@@ -201,7 +218,9 @@ export default function Skybackground() {
     // resize, then draw at once: setting the canvas size clears it, and this can run
     // just before the browser paints, so it must never be left blank
     function rebuild(w, h, pw, ph) {
+      const s = window.scrollY / H // where the story is: the same px at the new height would be somewhere else in it
       resize(w, h, pw, ph)
+      if (t >= INTRO_END) window.scrollTo(0, Math.round(s * H))
       lastScroll = window.scrollY
       const now = holeAt(t)
       draw(reveal(t, W, H, S), lastScroll, now)
@@ -251,6 +270,10 @@ export default function Skybackground() {
     <>
       <canvas ref={canvasRef} className="sky" aria-hidden="true" />
       <div ref={probeRef} className="sky-probe" />
+      {/* tells you to scroll once the intro is over; its opacity is set by the frame loop (HINT_*) */}
+      <div ref={hintRef} className="scroll-hint" aria-hidden="true">
+        scroll<span>v</span>
+      </div>
       {/* what the sky spells out, for screen readers and search engines (about.js ABOUT) */}
       <section className="visually-hidden">
         <h2>{ABOUT.kicker}</h2>

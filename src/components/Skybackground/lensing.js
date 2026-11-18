@@ -14,6 +14,7 @@ const PITCH_FROM_TILT = 0.35 // the camera tips further as the disk tilts toward
 const SPIN = 0.006 // how fast the sky turns, radians a second; near the hole the lensing makes it a lot of motion
 const DISTANCE = 14 // camera distance from the hole, in its masses: closer bends more (backs off on very tall screens)
 const TABLE = 1024 // rays in the bend table
+const SKY_GROWS = 1 // how much the sky grows (or shrinks) with the hole as it changes from its intro size: 1 = as much, so the sky bends as calmly as in the intro; 0 = not at all, so the bigger the hole gets, the further across the sky the bending reaches (it warps the whole screen)
 
 // the shadow's angular radius seen from distance D (in masses)
 const shadowAngle = (D) => Math.asin((Math.sqrt(27) * Math.sqrt(1 - 2 / D)) / D)
@@ -84,8 +85,8 @@ vec3 shade(vec2 p) {
   vec3 v = vec3(sin(a) * eb.x, -sin(a) * eb.y, -cos(a));        // the unbent ray, in the sky's own frame (pinned where the intro left it)
   float tv = acos(clamp(dot(v, hd), -1.0, 1.0));
   vec3 e = v - cos(tv) * hd; float le = length(e); e = le > 1e-5 ? e / le : vec3(1.0, 0.0, 0.0);
-  float k = tv - bend(th) * f / f0;                             // swung round toward the hole (past it, for the ring images), as hard
-                                                                // for its size as before it moved: f / f0 is how much it has grown
+  float k = tv - bend(th) * f / f0;                             // swung round toward the hole (past it, for the ring images); f / f0:
+                                                                // how much more the hole has grown than the sky (SKY_GROWS)
   vec3 s = M * (cos(k) * hd + sin(k) * e);
   float lon = atan(s.x, -s.z), lat = asin(clamp(s.y, -1.0, 1.0));
   return texture2D(sky, vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI)).rgb;
@@ -203,7 +204,7 @@ export function createLensing() {
     },
     // draws the lensed sky for hole h (from blackhole.js's hole()) at clock t; false if it can't.
     // sky: the hole as it was before it moved (hole() with m = 0). The sky stays pinned
-    // to that, so only the hole and its bending move across it as it settles
+    // to that, so only the hole and its bending move across it as it settles; it grows with the hole by SKY_GROWS
     draw(h, sky, t) {
       if (!gl) return false
       const scale = Math.min(dpr, RES), cw = Math.round(W * scale), ch = Math.round(H * scale)
@@ -221,7 +222,7 @@ export function createLensing() {
       gl.uniform1f(u.rs, rs)
       gl.uniform1f(u.thSh, thSh)
       gl.uniform1f(u.f, rs / thSh)
-      const f0 = (sky.R * 0.98 * scale) / thSh, dx = (h.cx - sky.cx) * scale, dy = (h.cy - sky.cy) * scale, l = Math.hypot(dx, dy), a = l / f0
+      const f0 = (sky.R * Math.pow(h.R / sky.R, SKY_GROWS) * 0.98 * scale) / thSh, dx = (h.cx - sky.cx) * scale, dy = (h.cy - sky.cy) * scale, l = Math.hypot(dx, dy), a = l / f0
       gl.uniform2f(u.cb, sky.cx * scale, sky.cy * scale)
       gl.uniform1f(u.f0, f0)
       gl.uniform3f(u.hd, l > 1e-4 ? (Math.sin(a) * dx) / l : 0, l > 1e-4 ? (-Math.sin(a) * dy) / l : 0, -Math.cos(a)) // the hole's direction in the sky's frame

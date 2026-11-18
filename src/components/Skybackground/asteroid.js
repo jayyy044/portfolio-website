@@ -25,7 +25,7 @@ const FADE_IN = 0.06 // screens of scroll over which its glow fades in as it com
 // ---------- the line in: straight, through the name ----------
 const CROSS_AT = 0.56 // where its centre crosses the name line: 0 = the first letter, 1 = the last
 const STOP_X = 0.36, STOP_Y = 0.5 // which way it comes in: it aims at this point, in screen widths from the left and heights from the top
-const STOP_X_PHONE = 0.42, STOP_Y_PHONE = 0.6 // the same on phones (under 700 px wide)
+const STOP_X_PHONE = 0.42, STOP_Y_PHONE = 0.6 // the same on tall screens (TALL)
 const HIT_DEPTH = 0.45 // how far short of the line its centre is at HIT, in nucleus radii (the rock's half-thickness)
 const START = 0.8 // how far above the top of the screen its centre starts, in nucleus radii (about its half-thickness: it is on screen at once)
 // ---------- the bend: from the hit it is on a tilted spiral round the hole while it writes the about-me; it leaves it
@@ -49,6 +49,8 @@ const EVEN_TURN = 0.15 // how much it slows where its way bends hardest, so its 
 const TURNS = 1.25 // about how many times it goes round the hole first (it comes onto the ring over the top, in front)
 const INFALL_TILT = 0.85 // how open its orbit looks: its height on screen against its width; the half above the hole is the near one
 const BLEND = 0.15 // how much of its first turn it takes to come round from the way it was going onto its orbit
+const DIVE_TALL = 1 // tall screens (TALL), where it is released high above the hole (about.js TALL_*): how steeply it dives in at first,
+// down through the text: 0 = only as fast as it was falling in, 1 = as fast as still tightens all the way
 const HOLE_TO_ROCK = 2.4 // the hole's shadow grows, if need be, to at least this many times the rock's radius as the camera takes over
 const RING_R = 1.03 // it comes onto the ring this far out, in shadow radii, along it
 const WRAP = 1.4 // then its head goes on round the ring this far, radians, sinking into the shadow
@@ -61,10 +63,11 @@ const RIBBON = 1.2 // how much brighter its dust trail burns by then, the rock p
 const LEAD = 0.45 // how far round ahead of it its stream runs by then, in turns: the inner part, spiralling in ahead of it
 const LAG = 0.2 // and how much further back its trail reaches, in turns: the outer part, lagging
 const DRAIN = 0.6 // screens of scroll the rest of the stream takes to pour in after its head is on the ring
+const DRAIN_TALL = 0.3 // the same on tall screens (TALL): it has further to go round there (DIVE_TALL), so the time this saves goes to that
 const COOL = 0.5 // how much of the way on round the ring what has gone in takes to cool from the fire's blue into the hole's colours
 // ---------- the camera that follows it in (about.js cameraAt asks followAt) ----------
 const FOLLOW = 0.35 // what it centres on: this far from the hole's centre toward the rock
-const FRAME_PAD = 0.08 // room it keeps round the rock and the hole, as shares of the screen
+export const FRAME_PAD = 0.08 // room it keeps round the rock and the hole, as shares of the screen (the close up keeps the rock in it too, about.js)
 const AIM_SMOOTH = 1 // how much of a turn of its way it averages its aim and zoom over: steadier, with no lag
 const HANDOFF = 2 // screens of scroll it takes to take over from the close up, smoothly, from the release
 const ZOOM_FIRST = 0.6 // it zooms out in this share of that, making room round the rock before it moves its aim
@@ -74,7 +77,13 @@ const STILL = 0.15 // then a still frame of the hole, and the page's scroll room
 export const INFALL = IN_TIME + DRAIN + STILL // screens of scroll from the release to the end
 // ---------- the rock ----------
 const SIZE = 0.16 // the nucleus' radius, in screen heights
-const SIZE_PHONE = 0.18 // and on phones, in screen widths
+const SIZE_ASPECT = 1.6 // but on screens narrower than this, width against height, as though they were only this wide: a narrowing
+// window shrinks it with its width (16:10 and wider are sized by their height alone, as they always were)
+const SIZE_PHONE = 0.18 // on tall screens (TALL): no more than this, in screen widths (it is what sizes it on phones and upright tablets)
+const TALL = 0.76 // screens narrower than this, width against height, are tall (phones; upright tablets, 3:4 = 0.75): the rock comes in
+// toward STOP_X_PHONE, STOP_Y_PHONE at SIZE_PHONE and the about-me goes across its path (about.js). Wider ones, square and a little
+// upright too (half a laptop screen), are the wide screen scaled down; that stops fitting below about 0.72 on a 710 px tall window
+export const tallOf = (W, H) => W < TALL * H
 const FIRE = 1 // the fire hugs the rock's outline, scaled by this: 1 = right at its edge, more = standing off it
 // the fire is shaped like a comet's head round the way it is going: sizes in rock radii past its edge
 const FRONT = 0.2 // how far the fire stands off its leading face: thin and white hot, the face it is pushing through
@@ -87,7 +96,7 @@ const HEAT = 0.95 // how hot the fire burns at the rock's edge: 1 = white hot th
 const BLAZE = 1.5 // how intense the flames are: brighter, denser glyphs (1 = as they were)
 const TONGUES = 3 // how many tongues of flame round it: more = finer, more of them
 const FLICKER = 3.5 // how fast the tongues run back along it
-const TRAIL = 11 // how long its dust trail is, in nucleus radii (it shortens as the rock is torn away)
+const TRAIL = 11 // how long its dust trail is, in nucleus radii (it lengthens into its stream as the tide grows)
 const TRAIL_WIDTH = 0.8 // how wide it is where it starts, in nucleus radii (it widens as it goes)
 const TRAIL_GLOW = 1.8 // how intense the trail is: brighter, denser glyphs (1 = as it was)
 const TRAIL_HOT = 0.35 // how far back it stays hot before cooling to red dust, in trail lengths
@@ -97,7 +106,7 @@ const BLUE_FIRE = true // experiment: blue flames, trail and sparks instead of t
 export const BLUE = [[18, 36, 130], [36, 84, 215], [64, 145, 255], [145, 205, 255], [225, 244, 255]] // their colours, coolest to hottest: deep, blue, azure, ice, white hot
 const GLOWS = [[4, 1.2, 1], [8, 2.6, 0.8]] // the fire's glow: [shrink factor, blur px, strength], like the hole's (ascii.js)
 
-const PHONE = 700, DEEP = 0, RED = 1, ORANGE = 2, AMBER = 3, HOT = 4, TAU = 2 * Math.PI, WARM = 4096, BACK = 8192 // bucket keys: + WARM for the hole's own colours, + BACK for the layer behind the hole
+const DEEP = 0, RED = 1, ORANGE = 2, AMBER = 3, HOT = 4, TAU = 2 * Math.PI, WARM = 4096, BACK = 8192 // bucket keys: + WARM for the hole's own colours, + BACK for the layer behind the hole
 const c01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x)
 const sst = (a, b, x) => { const u = c01((x - a) / (b - a)); return u * u * (3 - 2 * u) }
 const smoother = (x) => { x = c01(x); return x * x * x * (x * (6 * x - 15) + 10) } // no jump in the curvature at either end
@@ -117,14 +126,14 @@ function view(T, o) {
 // W, H: the screen in css px; dpr: device px per css px; B: the hole's resting place (rest()); N: the name's
 // layout (name.js createName); A: the hole's letter grid (ascii.js createArt)
 export function createAsteroid(W, H, dpr, B, N, A) {
-  const phone = W < PHONE
-  const T = { W, H, dpr, A, rr: phone ? SIZE_PHONE * W : SIZE * H, F: { s: NaN }, tmp: {}, q: new Float64Array(5), cam: NO_CAM, end: Infinity }
+  const tall = tallOf(W, H)
+  const T = { W, H, dpr, A, rr: tall ? Math.min(SIZE * H, SIZE_PHONE * W) : SIZE * Math.min(H, W / SIZE_ASPECT), F: { s: NaN }, tmp: {}, q: new Float64Array(5), cam: NO_CAM, end: Infinity }
   T.fr = FIRE * T.rr
   T.out = new Float32Array(72) // the rock's outline this frame (comet.js outline)
   T.ball = Math.max(...outline(0, 0, T.out)) // its radius, in nucleus radii
   // the line in: from above the screen, its centre through the name at CROSS_AT, toward STOP
   const Mx = N.x0 + CROSS_AT * N.wTot, My = N.ty
-  const dx0 = (phone ? STOP_X_PHONE : STOP_X) * W - Mx, dy0 = (phone ? STOP_Y_PHONE : STOP_Y) * H - My
+  const dx0 = (tall ? STOP_X_PHONE : STOP_X) * W - Mx, dy0 = (tall ? STOP_Y_PHONE : STOP_Y) * H - My
   const stop = Math.hypot(dx0, dy0) || 1, dy1 = Math.max(0.2 * stop, dy0), dl = Math.hypot(dx0, dy1) // it always falls (it starts above the screen)
   T.M = [Mx, My]
   T.dir = [dx0 / dl, dy1 / dl]
@@ -308,10 +317,11 @@ function sinceOf(Q, s) {
 // (RING_R) over about TURNS turns, its radius easing in from how fast it was falling in, coming onto the ring over the
 // top as its orbit opens into the ring's circle; it comes round from the way it was going over its first BLEND of a
 // turn; then on round the ring, sinking in (WRAP). The camera's aim and zoom are worked out along it too (followAt), and
-// its pace: even as the camera sees it (EVEN_TURN aside), getting its head onto the ring IN_TIME after the release
+// its pace: even as the camera sees it (EVEN_TURN aside), getting its head onto the ring IN_TIME after the release (tall
+// screens: and what DRAIN_TALL saves)
 export function setInfall(T, sr, story, cam, W, H, follow) {
   T.Q = null
-  const s0 = story(sr), xs = new Float64Array(257) // the story's scroll after the release, at even steps of the scroll through the infall
+  const tall = tallOf(W, H), s0 = story(sr), xs = new Float64Array(257) // the story's scroll after the release, at even steps of the scroll through the infall
   for (let i = 0; i <= 256; i++) xs[i] = story(sr + (i * INFALL) / 256) - s0
   const a0 = arcOf(T, s0), S = pointAt(T, a0, {}), kr = cam.k, px = S.x * kr + cam.ox, py = S.y * kr + cam.oy
   const rock = T.ball * T.rr * kr, R0 = T.P.R * cam.kf, grow = follow ? Math.max(1, (HOLE_TO_ROCK * rock) / R0) : 1
@@ -322,7 +332,7 @@ export function setInfall(T, sr, story, cam, W, H, follow) {
   let Psi = (((sense * (Math.PI / 2 - ph0)) % TAU) + TAU) % TAU // ending straight over the top, about TURNS round
   Psi += TAU * Math.max(0, Math.round((TURNS * TAU - Psi) / TAU))
   const L0 = Math.log(r0), L1 = Math.log(RING_R), dL = Math.abs(L1 - L0) // its radius, log, eased in from how fast it was falling in (no further than keeps it tightening all the way)
-  const m0 = Math.max(-3 * dL, Math.min(0, Math.tan(Math.max(-1.2, Math.min(1.2, Math.asin((xp * vx + yp * vy) / (r0 * vl))))) * Psi)), open = Math.min(0.9, (0.4 * TAU) / Psi) // the last of it opens into the ring
+  const m0 = Math.max(-3 * dL, Math.min(tall ? -3 * DIVE_TALL * dL : 0, Math.tan(Math.max(-1.2, Math.min(1.2, Math.asin((xp * vx + yp * vy) / (r0 * vl))))) * Psi)), open = Math.min(0.9, (0.4 * TAU) / Psi) // the last of it opens into the ring
   const orbit = (t, o) => {
     const t2 = t * t, t3 = t2 * t, r = Math.exp((2 * t3 - 3 * t2 + 1) * L0 + (t3 - 2 * t2 + t) * m0 + (3 * t2 - 2 * t3) * L1)
     const ph = ph0 + sense * Psi * t, c = smooth((t - 1 + open) / open), k = INFALL_TILT + (1 - INFALL_TILT) * c
@@ -337,16 +347,13 @@ export function setInfall(T, sr, story, cam, W, H, follow) {
   orbit(0, o)
   const ex = o2[0] - o[0], ey = o2[1] - o[1], el = Math.hypot(ex, ey), c0 = el / 1e-4, tb = (BLEND * TAU) / Psi
   const bx = c0 * (Math.cos(th0) - ex / el), by = c0 * (Math.sin(th0) - ey / el) // it sets off the way it was going, coming round onto its orbit
-  const Q = { s0, a0, xs, n }, rf = { x: new Float64Array(n), y: new Float64Array(n) }
+  const Q = { s0, a0, xs, n, in: IN_TIME + (tall ? DRAIN - DRAIN_TALL : 0), drain: tall ? DRAIN_TALL : DRAIN }, pf = { x: new Float64Array(n), y: new Float64Array(n) }, rf = { x: new Float64Array(n), y: new Float64Array(n) }
   for (const q of ['x', 'y', 'd', 'a', 'w', 'tx', 'ty']) Q[q] = new Float64Array(n)
   const wOf = (r) => c01((Math.pow(r0 / r, 3) - 1) / (Math.pow(r0 / RING_R, 3) - 1))
   let i = 0
   const add = (x, y, d, w) => {
-    rf.x[i] = x
-    rf.y[i] = y
-    Q.x[i] = (x - cam.ox) / kr
-    Q.y[i] = (y - cam.oy) / kr
-    Q.a[i] = i ? Q.a[i - 1] + Math.hypot(Q.x[i] - Q.x[i - 1], Q.y[i] - Q.y[i - 1]) : 0
+    pf.x[i] = x
+    pf.y[i] = y
     Q.d[i] = d
     Q.w[i] = w
     i++
@@ -360,20 +367,17 @@ export function setInfall(T, sr, story, cam, W, H, follow) {
     const u = j / NW, ph = Math.PI / 2 + sense * WRAP * u, r = RING_R * Math.exp(-Math.tan(SINK_IN) * WRAP * u * u)
     add(hx + R * r * Math.cos(ph), hy - R * r * Math.sin(ph), 1, 1)
   }
-  tangents(Q)
-  Q.tx[0] = S.tx
-  Q.ty[0] = S.ty
-  Q.ring = Q.a[NA] // where its head is on the ring
-  Q.ph = Math.atan2(rf.y[NA] - hy, rf.x[NA] - hx)
-  Q.fade = Math.max(1, FADE * (Q.a[n - 1] - Q.ring))
   Q.turn = (TAU * RING_R * R) / kr // a turn round the ring, in the scene
   Q.lt = TRAIL * T.rr + LAG * Q.turn // the longest its trail gets: the stream's tail end starts that far back as it pours in
   Q.soft = 2 * T.ball * T.rr
-  // the camera, at each point of the way: aiming between the rock and the hole, zoomed to keep both on screen, averaged
+  // That is its way round the hole grown all the way (pf); but the hole only grows (about the rock, where it is released)
+  // as the camera takes over (followAt: g), so each point goes where it is against the hole as drawn when the rock gets
+  // there (hs: when that is, screens of scroll after the release): its way out from the release, shrunk by g / grow.
+  // And the camera, at each point of the way: aiming between the rock and the hole, zoomed to keep both on screen, averaged
   // over AIM_SMOOTH of a turn; taking over from the close up over HANDOFF; at the end settling on the hole
-  const C = { z: new Float64Array(n), x: new Float64Array(n), y: new Float64Array(n) }
+  const C = { z: new Float64Array(n), x: new Float64Array(n), y: new Float64Array(n) }, G = new Float64Array(n)
   const ax = W / 2 - W * FRAME_PAD, ay = H / 2 - H * FRAME_PAD, mr = 1.6 * rock, end = (j) => smooth((j - NA) / (0.5 * NW)) // past the ring it settles on the hole
-  const span = Math.max(1, Math.round((AIM_SMOOTH * NA * TAU) / Psi))
+  const span = Math.max(1, Math.round((AIM_SMOOTH * NA * TAU) / Psi)), H0x = T.P.cx * cam.kf + cam.fox, H0y = T.P.cy * cam.kf + cam.foy
   const box = (v) => { // averaged over a stretch of the way centred on each point (no lag; shorter at the ends, so they stay put)
     const sum = new Float64Array(n + 1)
     for (let j = 0; j < n; j++) sum[j + 1] = sum[j] + v[j]
@@ -381,30 +385,47 @@ export function setInfall(T, sr, story, cam, W, H, follow) {
     for (let j = 0; j < n; j++) { const w = Math.min(span, j, n - 1 - j); u[j] = (sum[j + w + 1] - sum[j - w]) / (2 * w + 1) }
     return u
   }
-  for (let j = 0; j < n; j++) {
-    C.x[j] = hx + FOLLOW * (1 - end(j)) * (rf.x[j] - hx)
-    C.y[j] = hy + FOLLOW * (1 - end(j)) * (rf.y[j] - hy)
+  const hxOf = (j) => px + G[j] * (H0x - px), hyOf = (j) => py + G[j] * (H0y - py) // the hole as drawn there
+  const lay = (hs) => {
+    for (let j = 0; j < n; j++) {
+      G[j] = follow ? 1 + (grow - 1) * handoff(hs[j])[0] : 1
+      const f = G[j] / grow
+      rf.x[j] = px + f * (pf.x[j] - px)
+      rf.y[j] = py + f * (pf.y[j] - py)
+      Q.x[j] = (rf.x[j] - cam.ox) / kr
+      Q.y[j] = (rf.y[j] - cam.oy) / kr
+      Q.a[j] = j ? Q.a[j - 1] + Math.hypot(Q.x[j] - Q.x[j - 1], Q.y[j] - Q.y[j - 1]) : 0
+    }
+    tangents(Q)
+    Q.tx[0] = S.tx
+    Q.ty[0] = S.ty
+    Q.ring = Q.a[NA] // where its head is on the ring
+    Q.fade = Math.max(1, FADE * (Q.a[n - 1] - Q.ring))
+    for (let j = 0; j < n; j++) {
+      C.x[j] = hxOf(j) + FOLLOW * (1 - end(j)) * (rf.x[j] - hxOf(j))
+      C.y[j] = hyOf(j) + FOLLOW * (1 - end(j)) * (rf.y[j] - hyOf(j))
+    }
+    C.x = box(C.x)
+    C.y = box(C.y)
+    for (let j = 0; j < n; j++) { // as near as keeps the rock and the hole in frame round that aim
+      const tx = C.x[j], ty = C.y[j], e = end(j), m = mr * (1 - e), hx = hxOf(j), hy = hyOf(j), R = G[j] * R0
+      const sx = Math.max(Math.abs(rf.x[j] - tx) + m, Math.abs(hx - tx) + (1.25 + 0.9 * e) * R) // the shadow and the arch over it (more of the disk at the end)
+      const sy = Math.max(Math.abs(rf.y[j] - ty) + m, ty - hy + 1.95 * R, hy - ty + (1.2 + 0.3 * e) * R)
+      C.z[j] = Math.log(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ax / sx, ay / sy)))
+    }
+    const zm = Float64Array.from(C.z) // no nearer than any point near it allows, then averaged
+    for (let j = 0; j < n; j++) for (let i = Math.max(0, j - span); i <= Math.min(n - 1, j + span); i++) zm[j] = Math.min(zm[j], C.z[i])
+    C.z = box(zm)
+    for (let j = 0; j < n; j++) C.z[j] = Math.exp(C.z[j])
   }
-  C.x = box(C.x)
-  C.y = box(C.y)
-  for (let j = 0; j < n; j++) { // as near as keeps the rock and the hole in frame round that aim
-    const tx = C.x[j], ty = C.y[j], e = end(j), m = mr * (1 - e)
-    const sx = Math.max(Math.abs(rf.x[j] - tx) + m, Math.abs(hx - tx) + (1.25 + 0.9 * e) * R) // the shadow and the arch over it (more of the disk at the end)
-    const sy = Math.max(Math.abs(rf.y[j] - ty) + m, ty - hy + 1.95 * R, hy - ty + (1.2 + 0.3 * e) * R)
-    C.z[j] = Math.log(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ax / sx, ay / sy)))
-  }
-  const zm = Float64Array.from(C.z) // no nearer than any point near it allows, then averaged
-  for (let j = 0; j < n; j++) for (let i = Math.max(0, j - span); i <= Math.min(n - 1, j + span); i++) zm[j] = Math.min(zm[j], C.z[i])
-  C.z = box(zm)
   // its pace: even, as the camera sees it, with a little time added where its way bends hardest (EVEN_TURN, as much as its
   // average bend would take). When the camera takes over from the close up depends on the pace, and the pace on what the
-  // camera does, so a few tries, each halfway to the last
+  // camera does (and so, as the hole grows, on where its way goes), so a few tries, each halfway to the last
   const lam = new Float64Array(n), hs = new Float64Array(n).fill(9), bend = new Float64Array(n) // hs: when it gets to each point (first: long after the handoff)
-  let turned = 0
-  for (let j = 1; j < n; j++) { const d = Math.atan2(Q.ty[j], Q.tx[j]) - Math.atan2(Q.ty[j - 1], Q.tx[j - 1]); bend[j] = Math.abs(Math.atan2(Math.sin(d), Math.cos(d))); if (j <= NA) turned += bend[j] }
-  for (let j = 0; j < n; j++) C.z[j] = Math.exp(C.z[j])
   for (let pass = 0; pass < 10; pass++) {
-    let qx = 0, qy = 0
+    if (!pass || grow > 1) lay(hs)
+    let qx = 0, qy = 0, turned = 0
+    for (let j = 1; j < n; j++) { const d = Math.atan2(Q.ty[j], Q.tx[j]) - Math.atan2(Q.ty[j - 1], Q.tx[j - 1]); bend[j] = Math.abs(Math.atan2(Math.sin(d), Math.cos(d))); if (j <= NA) turned += bend[j] }
     for (let j = 0; j < n; j++) {
       const [h, hz] = follow ? handoff(hs[j]) : [0, 0], z = 1 + (C.z[j] - 1) * hz // the rock on screen
       const sx = W / 2 + z * (rf.x[j] - W / 2 - (C.x[j] - W / 2) * h), sy = H / 2 + z * (rf.y[j] - H / 2 - (C.y[j] - H / 2) * h)
@@ -414,7 +435,7 @@ export function setInfall(T, sr, story, cam, W, H, follow) {
     }
     const per = (EVEN_TURN * lam[NA]) / Math.max(1e-6, turned) // screen px a radian of its bend is worth
     for (let j = 1, add = 0; j < n; j++) { add += per * bend[j]; lam[j] += add }
-    const v = along(Q, Q.a, Q.ring, lam) / (IN_TIME - EASE / 2)
+    const v = along(Q, Q.a, Q.ring, lam) / (Q.in - EASE / 2)
     for (let j = 0; j < n; j++) hs[j] = (hs[j] + easeBack(lam[j] / v)) / 2 // when it gets here, screens of scroll after the release
   }
   Q.lam = lam
@@ -424,7 +445,7 @@ export function setInfall(T, sr, story, cam, W, H, follow) {
   Q.grow = grow
   Q.W = W
   Q.H = H
-  Q.v = along(Q, Q.a, Q.ring, lam) / (IN_TIME - EASE / 2)
+  Q.v = along(Q, Q.a, Q.ring, lam) / (Q.in - EASE / 2)
   T.Q = Q
   T.end = s0 + xs[256]
 }
@@ -712,10 +733,10 @@ function prep(T, s, t, cam, knock, h) {
   if (F.s === s && F.t === t && F.cam === cam && F.knock === knock && F.h === h) return F
   T.cam = cam
   T.knock = knock
-  const x = Q && s > Q.s0 ? sinceOf(Q, s) - IN_TIME : -Infinity // screens of scroll since its head came onto the ring
+  const x = Q && s > Q.s0 ? sinceOf(Q, s) - Q.in : -Infinity // screens of scroll since its head came onto the ring
   T.clip = Q && s > Q.s0 ? h : null // the shadow, for keep: what has gone in goes out in it
   // once its head is in, the ribbon's tail end follows it in: from the far end of its longest trail to past the edge
-  T.tail = x > 0 ? Q.a0 + Q.ring + Q.soft - (Q.lt + Q.soft) * (1 - smoother(x / DRAIN)) : -Infinity
+  T.tail = x > 0 ? Q.a0 + Q.ring + Q.soft - (Q.lt + Q.soft) * (1 - smoother(x / Q.drain)) : -Infinity
   F.knock = knock
   F.h = h
   view(T, stateAt(T, s, F))

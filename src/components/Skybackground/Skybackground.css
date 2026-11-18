@@ -20,3 +20,41 @@
   visibility: hidden;
   pointer-events: none;
 }
+
+/* the "scroll" hint, bottom centre; the frame loop fades it in after the intro and out on scrolling (Skybackground.jsx HINT_*) */
+.scroll-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 4svh);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5em;
+  padding-left: 0.35em; /* evens out the letter spacing after the last letter, so it centres */
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.35em;
+  color: rgb(236 232 240 / 0.6); /* the name's line colour, dimmed (name.js TEXT_RGB) */
+  opacity: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* the ASCII arrow under it bobs */
+.scroll-hint span {
+  animation: scroll-hint-bob 1.6s ease-in-out infinite;
+}
+
+@keyframes scroll-hint-bob {
+  50% {
+    transform: translateY(0.45em);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-hint span {
+    animation: none;
+  }
+}
