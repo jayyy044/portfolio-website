@@ -13,7 +13,7 @@ const FPS = 30 // redraws a second: the letters and the sky's motion are both sl
 const SPEED = 1.75 // how fast the clock runs: 2 = twice as fast, 0.5 = half
 const SWAY_X = 14, SWAY_Y = 9 // how far the whole sky sways, in px
 const MOVE_ROOM = 1 // screens of scroll, after the intro, that take the hole down to its resting place
-const ROOM = Math.max(MOVE_ROOM, REVEAL_END, ROOM_END) // the page's scroll room, in screens: the hole settles, the name comes out of it (name.js), the asteroid smashes it and, falling on, writes the about-me (about.js), then the asteroid spirals into the hole (asteroid.js)
+const ROOM = Math.max(MOVE_ROOM, REVEAL_END, ROOM_END) // the page's scroll room, in screens: the hole settles, the name comes out of it (name.js), the asteroid smashes it and, falling on, writes the about-me (about.js), then the asteroid falls into the hole (asteroid.js)
 const SCROLL_EASE = 8 // how quickly the hole catches up with the scroll, per second: higher follows tighter, lower glides more
 const SKIP_INTRO = true // TEMPORARY, for tuning: start at the end of the intro, hole already where the scroll puts it. Set false to get the intro back
 
@@ -167,7 +167,7 @@ export default function Skybackground() {
       // every frame (a name parked mid-reveal only scrambles, and the landed one's sweep is slow enough: the FPS
       // tick covers both; the asteroid tumbles and burns on its own, so it redraws every frame while it is on screen; once it has gone
       // into the hole the page is back to the FPS tick)
-      const busy = asteroidBusy(storyOf(sS))
+      const busy = asteroidBusy(ast, storyOf(sS))
       if (update || scroll !== lastScroll || (rv && !rv.full) || (sS !== prev && (nameMoving(sS) || busy)) || (busy && !reduced)) {
         lastScroll = scroll
         draw(rv, scroll, h)

@@ -8,12 +8,12 @@
 // path, tall ones across it above the rock. It holds, still and readable, while the rock comes to rest near the hole
 // (which sinks out of the text's way), the asteroid's glyph field parting round the type; then, as the rock moves on, the
 // letters break up into the tail's own glyphs and are drawn into its tail, streaming away down it (never toward the
-// hole), and the camera pulls back to a wide shot that frames the hole and the loops the rock is about to go round,
-// while time runs on: the capture plays as before. All a pure function of the scroll. Reduced motion: no camera;
-// the rock fades out while the text fades in, line by line, and back.
-import { smooth, POOLS } from './blackhole'
+// hole), and the rock is released: time speeds back up, the rock gets going from rest into its fall into the hole
+// (asteroid.js setInfall) and the camera eases back, in one move, to a calm wide shot of the hole. All a pure function
+// of the scroll. Reduced motion: no camera; the rock fades out while the text fades in, line by line, and back.
+import { smooth, POOLS, REST_LIFT } from './blackhole'
 import { hash, piecesOf } from './name'
-import { pathAt, STORY_END, GONE, BLUE, DUST, stroke } from './asteroid'
+import { pathAt, setInfall, INFALL, BLUE, DUST, stroke } from './asteroid'
 
 // ---------- the copy: type your own here ----------
 export const ABOUT = {
@@ -28,11 +28,11 @@ const WRITE_RATE = 0.3 // how fast the story runs while the rock writes, against
 const WHIP_FROM = 2.8, WHIP_TO = 2.98 // the wanted pieces of the name whip across between these; the rest fade away
 const WRITE_FROM = 3 // the camera is in and the rock on its track: it starts writing (the top line)
 const WRITE_TO = 3.85 // and the last letter has locked; then the text holds while the rock comes to rest near the hole
-const CLEAR_AT = 4.4 // as the rock moves on, the letters start to dissolve into its tail, those nearest it first
+const CLEAR_AT = 4.4 // the rock is released: it moves on, and the letters start to dissolve into its tail, those nearest it first
 const DISSOLVE = 0.35 // screens of scroll each takes, from breaking up to gone down the tail
 const CLEAR_SPREAD = 0.15 // from the first letter going to the last
-const PULL_AT = 4.5 // the camera starts to pull back and time to speed up again
-const PULL = 0.5 // screens of scroll that takes; then the story runs on as before, later by the time it was slowed
+const PULL = 0.5 // screens of scroll time takes to get back to full speed after the release (the rock's tumble; its fall keeps its own pace)
+const CAM = 0.7 // and the camera to ease back from the rock to the wide shot
 // ---------- the camera ----------
 const WRITE_ZOOM = 1.3 // how much nearer the camera is while the rock writes (it pushes in from ZOOM_AT to WRITE_FROM)
 const V_MIN = 0.12 // the slowest the rock falls down the screen while it writes, in screen heights per screen of scroll
@@ -40,11 +40,11 @@ const HOLD_EASE = 0.2 // after the last letter the rock slows and comes to rest 
 const FAR_IN = 0.5 // screens of scroll the hole and the sky take to come nearer and sink, from ZOOM_AT (slower than the push in)
 const FAR_ZOOM = 1.08 // how much bigger the hole and the sky get at the closest (far away: a little)
 const PARALLAX = 0.2 // how much of the camera's pan the hole and the sky follow: 0 = none, 1 = as much as the rock
-// the wide shot for the capture: the hole and the loops round it framed, moved only as far as that needs; it comes in
-// once the rock is falling into the hole fast enough that the lift never turns it back
-const FRAME_AT = 4.75, FRAME_IN = 0.9 // from, and screens of scroll it takes
-const FRAME_MARGIN = 0.05, FRAME_MARGIN_X = 0.03 // room kept clear round the loops and the arch over the hole: screen heights, widths
-const FRAME_ZOOM_MAX = 1.2 // the most it moves in on the hole when there is room (it never moves out)
+// the wide shot the rock falls in in: the hole centred across, at the height it rests at, as big as WIDE_SIZE of the
+// screen's shorter side but never smaller than at rest, nor so big that it reaches the rock where it is released
+const WIDE_SIZE = 0.27 // the shadow's radius against the screen's shorter side (at rest it is about this on wide screens, smaller on tall ones)
+const WIDE_CLEAR = 0.4 // room kept between the shadow and the rock's edge where the rock is released, in shadow radii
+const WIDE_ROCK = 0.85 // how big the rock is in it, against how big the page has it (it is 1.3 times that close up, WRITE_ZOOM)
 // ---------- the name's pieces ----------
 const PIECES = 28, PIECES_TALL = 18 // how many of them become letters (wide screens, tall ones); the others fade away
 const WHIP = 0.16 // screens of scroll a piece takes to whip across to where it waits
@@ -95,18 +95,16 @@ const NO_CAM = { k: 1, ox: 0, oy: 0, a: 1, kf: 1, fox: 0, foy: 0 }
 // ---------------- time and the camera ----------------
 const I = (u) => u * u * u * (1 - u / 2) // the area under smooth() from 0 to u
 // Where the asteroid's story (asteroid.js, and the name's shatter) has got to at scroll s: s itself up to ZOOM_AT; then
-// it slows to WRITE_RATE while the camera is in, and runs at full speed again once it has pulled back, DELAY behind
+// it slows to WRITE_RATE while the camera is in, and runs at full speed again once the rock is released
 export function storyOf(s) {
   if (s <= ZOOM_AT) return s
-  const u1 = c01((s - ZOOM_AT) / SLOW_IN), u3 = c01((s - PULL_AT) / PULL)
-  const held = SLOW_IN * I(u1) + Math.max(0, Math.min(s, PULL_AT) - ZOOM_AT - SLOW_IN) + PULL * (u3 - I(u3))
+  const u1 = c01((s - ZOOM_AT) / SLOW_IN), u3 = c01((s - CLEAR_AT) / PULL)
+  const held = SLOW_IN * I(u1) + Math.max(0, Math.min(s, CLEAR_AT) - ZOOM_AT - SLOW_IN) + PULL * (u3 - I(u3))
   return s - (1 - WRITE_RATE) * held
 }
-const DELAY = (1 - WRITE_RATE) * (SLOW_IN / 2 + PULL_AT - ZOOM_AT - SLOW_IN + PULL / 2)
-export const ROOM_END = STORY_END + DELAY // the page's scroll room, in screens
-// how close the camera is, and how far onto the rock's track it has glided, 0..1; both go back as it pulls back
-const pulled = (s) => smoother((s - PULL_AT) / PULL)
-const framed = (s) => smoother((s - FRAME_AT) / FRAME_IN)
+export const ROOM_END = CLEAR_AT + INFALL // the page's scroll room, in screens: the release, then the rock's fall (asteroid.js INFALL)
+// how close the camera is, and how far onto the rock's track it has glided, 0..1; both go back as time speeds up
+const pulled = (s) => smoother((s - CLEAR_AT) / PULL)
 const closeness = (s) => smoother((s - ZOOM_AT) / (WRITE_FROM - ZOOM_AT)) * (1 - pulled(s))
 const farness = (s) => smoother((s - ZOOM_AT) / FAR_IN) * (1 - pulled(s)) // the same for the far things
 // how far the hole has sunk out of the text's way: it only comes back up once the last letter has gone
@@ -117,20 +115,27 @@ function trackAt(X, s) {
   return [X.start[0] + X.dir[0] * u, X.start[1] + X.dir[1] * u]
 }
 
-// The camera at scroll s. Near things (the rock, its fire, the name's pieces): on screen = k * scene + ox, oy; rx, ry:
-// the rock on screen; a: how much of it shows. Far things (the hole, the sky): kf * scene + fox, foy. X: the layout
-// (createAbout); T: the asteroid's. Two moves, one on the other: the wide shot (the page as it was, easing into X.frame
-// after the pull back), and the push in from it onto the rock's track, with parallax, the hole sinking X.sink px
+// The camera at scroll s. Near things (the rock, its fire, the name's pieces): on screen = k * scene + ox, oy; a: how
+// much of it shows. Far things (the hole, the sky): kf * scene + fox, foy. X: the layout (createAbout); T: the
+// asteroid's. Until the release: the page as it was, and the push in from it onto the rock's track, with parallax, the
+// hole sinking X.sink px. From the release (X.rel) one move over CAM back to the wide shot (X.wide): the hole eases
+// into it, and the rock is seen at the wide shot's scale, where its fall (asteroid.js setInfall) has it, while it
+// shrinks from the close up to that; the hold's own slow drift (X.drift) carries on, dying away as the move takes over
 export function cameraAt(X, T, s) {
-  const c = closeness(s), g = X.reduced ? 0 : framed(s)
-  if (c <= 0 && g <= 0 && sunk(s) <= 0) return NO_CAM
+  if (X.rel && s > CLEAR_AT && !X.reduced) {
+    const R = X.rel, V = X.wide, D = X.drift, g = smoother((s - CLEAR_AT) / CAM), u = (s - CLEAR_AT) * (1 - g)
+    const P = pathAt(T, storyOf(s), 0), k = R.k + (V.kn - R.k) * g
+    return { k, ox: (V.kn - k) * P.x + V.ox + D.x * u, oy: (V.kn - k) * P.y + V.oy + D.y * u, a: 1,
+      kf: R.kf + (V.kf - R.kf) * g + D.kf * u, fox: R.fox + (V.fox - R.fox) * g + D.fox * u, foy: R.foy + (V.foy - R.foy) * g + D.foy * u }
+  }
+  const c = closeness(s)
+  if (c <= 0 && sunk(s) <= 0) return NO_CAM
   if (X.reduced) return { ...NO_CAM, a: 1 - c, foy: X.sink * sunk(s) } // no zoom: the rock fades out, the hole only sinks out of the text's way
-  const kb = 1 + (X.frame.k - 1) * g, bx = X.frame.x * g, by = X.frame.y * g // the wide shot: on screen = kb * scene + bx, by
-  if (c <= 0) return { k: kb, ox: bx, oy: by, a: 1, kf: kb, fox: bx, foy: by + X.sink * sunk(s) }
-  const W0 = pathAt(T, storyOf(s), 0), fx = W0.x * kb + bx, fy = W0.y * kb + by, [tx, ty] = trackAt(X, s) // the rock in the wide shot; its track
-  const k = 1 + (X.k - 1) * c, cf = farness(s), kf = 1 + (FAR_ZOOM - 1) * cf, px = fx + (tx - fx) * c, py = fy + (ty - fy) * c // and on screen
-  return { k: k * kb, ox: k * (bx - fx) + px, oy: k * (by - fy) + py, a: 1, rx: px, ry: py,
-    kf: kf * kb, fox: kf * (bx - fx) + fx + (px - fx) * PARALLAX * cf, foy: kf * (by - fy) + fy + (py - fy) * PARALLAX * cf + X.sink * sunk(s) }
+  if (c <= 0) return { ...NO_CAM, foy: X.sink * sunk(s) }
+  const W0 = pathAt(T, storyOf(s), 0), [tx, ty] = trackAt(X, s) // the rock as the page has it; its track
+  const k = 1 + (X.k - 1) * c, cf = farness(s), kf = 1 + (FAR_ZOOM - 1) * cf, px = W0.x + (tx - W0.x) * c, py = W0.y + (ty - W0.y) * c // and on screen
+  return { k, ox: px - k * W0.x, oy: py - k * W0.y, a: 1,
+    kf, fox: (1 - kf) * W0.x + (px - W0.x) * PARALLAX * cf, foy: (1 - kf) * W0.y + (py - W0.y) * PARALLAX * cf + X.sink * sunk(s) }
 }
 // the hole h (blackhole.js hole()) seen through the camera
 export function farOf(h, cam) {
@@ -149,20 +154,14 @@ function canvas(w, h) {
   return [c, c.getContext('2d')]
 }
 
-// The wide shot for the capture, { k, x, y }: on screen = k * scene + x, y. The loops the rock goes round from the end
-// of the pull back until it is gone (its centre, padded by the rock and its fire) and the arch over the hole, kept
-// FRAME_MARGIN clear of the edges, as near as can be to where the page left them; the hole stays centred across
-function frameOf(T, W, H) {
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
-  for (let sa = storyOf(PULL_AT + PULL); sa <= GONE; sa += 0.005) {
-    const { x, y } = pathAt(T, sa)
-    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
-  }
-  const pad = 1.3 * T.ball * T.rr, cx = T.P.cx, cy = T.P.cy, mx = FRAME_MARGIN_X * W, my = FRAME_MARGIN * H
-  const top = Math.min(y0 - pad, cy - 1.85 * T.P.R), bot = y1 + pad, half = Math.max(cx - x0, x1 - cx) + pad // 1.85: blackhole.js REST_TOP
-  const k = Math.max(1, Math.min(FRAME_ZOOM_MAX, (H - 2 * my) / (bot - top), (W / 2 - mx) / half))
-  const lo = my - k * top, hi = H - my - k * bot // the room it has to move up or down in
-  return { k, x: W / 2 - k * cx, y: lo <= hi ? Math.min(hi, Math.max(lo, cy * (1 - k))) : (H - k * (top + bot)) / 2 }
+// The wide shot the rock falls into the hole in, for the hole: { kf, fox, foy } (on screen = kf * scene + fox, foy).
+// See WIDE_SIZE. P0, b: the rock on screen as it is released, and its radius
+function wideOf(T, P0, b, W, H) {
+  const bottom = T.P.cy + REST_LIFT * T.P.R // the bottom edge it rests on (a phone's toolbar can hide the rest of the screen)
+  let R = Math.max(T.P.R, WIDE_SIZE * Math.min(W, H))
+  while (R > T.P.R && Math.hypot(P0[0] - W / 2, P0[1] - bottom + REST_LIFT * R) - b < (1 + WIDE_CLEAR) * R) R = Math.max(T.P.R, R * 0.98)
+  const kf = R / T.P.R
+  return { kf, fox: W / 2 - kf * T.P.cx, foy: bottom - REST_LIFT * R - kf * T.P.cy }
 }
 
 // Lay the text out for this screen and work out the writing: where the rock's track runs, when each line types and
@@ -172,7 +171,7 @@ export function createAbout(W, H, dpr, N, T, reduced, copy = ABOUT) {
   const tall = W < H, snap = (v) => Math.round(v * dpr) / dpr
   const [cv, x] = canvas(Math.round(W * dpr), Math.round(H * dpr))
   const [glow, gx] = canvas(Math.max(1, Math.round(W / 3)), Math.max(1, Math.round(H / 3)))
-  const X = { W, H, dpr, reduced, cv, x, glow, gx, slots: [], sink: 0, pieces: [], k: WRITE_ZOOM, frame: frameOf(T, W, H) }
+  const X = { W, H, dpr, reduced, cv, x, glow, gx, slots: [], sink: 0, pieces: [], k: WRITE_ZOOM }
   const R = T.ball * T.rr * X.k, clear = FIRE_CLEAR * R // the rock close up, its radius; how far the text keeps from its centre
   // the rock as the writing starts (the camera has pushed in round it there) and the way it falls: its track's start and way
   const P0 = pathAt(T, storyOf(WRITE_FROM), 0), dl = Math.hypot(P0.tx, Math.max(0.3, P0.ty))
@@ -243,6 +242,15 @@ export function createAbout(W, H, dpr, N, T, reduced, copy = ABOUT) {
     for (const q of X.slots) if (q.at - SCRAMBLE <= s) sink = Math.max(sink, (q.y + 0.6 * L.fs + HOLE_CLEAR * H - (hy - holeTop((q.x - hx) / hr) * hr)) / f)
   }
   X.sink = sink
+
+  // the release: where the camera has the rock then, and the wide shot it eases back to; the rock's fall is worked out
+  // from those (reduced motion: no camera, and the hole as it rests)
+  const s0 = storyOf(CLEAR_AT), Wr = pathAt(T, s0), rel = (X.rel = cameraAt(X, T, CLEAR_AT)), Pr = [Wr.x * rel.k + rel.ox, Wr.y * rel.k + rel.oy]
+  const e = 0.005, was = cameraAt(X, T, CLEAR_AT - e), Ww = pathAt(T, storyOf(CLEAR_AT - e)) // how the hold was drifting, per screen
+  X.drift = { x: (Pr[0] - Ww.x * was.k - was.ox) / e, y: (Pr[1] - Ww.y * was.k - was.oy) / e, kf: (rel.kf - was.kf) / e, fox: (rel.fox - was.fox) / e, foy: (rel.foy - was.foy) / e }
+  const kn = reduced ? 1 : WIDE_ROCK, wide = reduced ? { kf: 1, fox: 0, foy: 0 } : wideOf(T, Pr, T.ball * T.rr * kn, W, H)
+  X.wide = { ...wide, kn, ox: Pr[0] - kn * Wr.x, oy: Pr[1] - kn * Wr.y }
+  setInfall(T, CLEAR_AT, storyOf, Pr, kn, { cx: T.P.cx * wide.kf + wide.fox, cy: T.P.cy * wide.kf + wide.foy, R: T.P.R * wide.kf })
   if (reduced) return X
 
   // a few of the name's pieces, spread through the text in the order it is written, each waiting for one letter

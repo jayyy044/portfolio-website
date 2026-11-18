@@ -20,7 +20,7 @@ const REST_INC = 0.08 // the disk at rest: nearly edge-on (keep it above 0, seen
 const REST_TILT = 0 // and level, in radians (the intro's is 17°)
 const REST_MARGIN = 24 // px kept clear between the drawing and the screen's left, right and top edges
 const REST_TIPS_ON = 0.58 // how much of each disk tip must stay on screen: 1 = all of it, lower = bigger hole (the outermost letters are faint)
-const REST_LIFT = 0.5// the hole's centre above the bottom edge, in shadow radii: 1 = shadow sits on the edge, lower sinks it more (v4 used 0.3)
+export const REST_LIFT = 0.5// the hole's centre above the bottom edge, in shadow radii: 1 = shadow sits on the edge, lower sinks it more (v4 used 0.3)
 const REST_ZOOM_MAX = 1.95 // the most it grows past its end-of-intro size; it grows less if it wouldn't fit
 // The drawing's reach from the hole's centre, in shadow radii, at REST_INC / REST_TILT. Measured, not
 // tuned: frame() on a grid of R/60 cells, t = 13..73, bounding box of the letters it lights (tags < 5);

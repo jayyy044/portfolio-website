@@ -55,6 +55,7 @@ uniform float uR;
 uniform mat3 uRot;
 uniform mat2 uAniso; // the stretch undone: screen (y up, in rock radii) -> the round rock's own frame
 uniform vec3 uL;
+uniform vec3 uClip; // a circle (centre, radius, css px) it is not drawn inside: the hole's shadow eating it (radius 0: none)
 out vec4 o;
 ${NOISE}
 float sdEll(vec3 p, vec3 r){ float k0 = length(p/r), k1 = length(p/(r*r)); return k0*(k0-1.)/k1; }
@@ -101,7 +102,7 @@ void main(){
   vec2 d = p - uC;
   vec3 col = vec3(0.); float occ = 0., hit = 0.;
   vec2 q = uAniso*(vec2(d.x, -d.y)/uR); float qq = dot(q, q);
-  if (qq < 1.25){
+  if (qq < 1.25 && length(p - uClip.xy) >= uClip.z){
     float zs = sqrt(1.25 - qq), tt = 0.; vec3 ro = vec3(q, zs);
     for (int i = 0; i < 80; i++){ float dd = sdf(ro - vec3(0, 0, tt)); if (dd < 0.0012){ hit = 1.; break; } tt += dd*0.56; if (tt > 2.*zs) break; }
     if (hit > 0.){
@@ -509,7 +510,8 @@ function build(W, H, dpr, cw) {
 
 // Draws the comet onto ctx. o: { W, H, dpr (the screen), x, y, r (the nucleus' centre and radius, css px), h (the hole:
 // the light comes from it, and its shadow stays dark), s (scroll, screens), t (the clock), vis (0..1: the gas fades in),
-// aniso (optional: the rock stretched, as the column-major 2x2 matrix taking screen offsets, y up, back to the round rock) }.
+// aniso (optional: the rock stretched, as the column-major 2x2 matrix taking screen offsets, y up, back to the round rock),
+// clip (optional: { cx, cy, R }, css px: a circle it is not drawn inside, the hole's shadow) }.
 // False if it can't (no WebGL2, or the GPU has gone away): the caller draws something else
 export function drawComet(ctx, o) {
   try {
@@ -531,7 +533,7 @@ export function drawComet(ctx, o) {
 }
 
 const ROUND = new Float32Array([1, 0, 0, 1])
-function draw(ctx, { W, H, dpr, x, y, r, h, s, t, vis, aniso }, cw) {
+function draw(ctx, { W, H, dpr, x, y, r, h, s, t, vis, aniso, clip }, cw) {
   const { gl } = G, ch = cw * 1.667, big = Math.max(W, H), sc = big / 1440
   // the light comes from the hole; the tails stream away from it, the dust lagging to the right
   let lx = h.cx - x, ly = h.cy - y
@@ -574,6 +576,7 @@ function draw(ctx, { W, H, dpr, x, y, r, h, s, t, vis, aniso }, cw) {
   gl.uniformMatrix3fv(u.uRot, false, new Float32Array(R))
   gl.uniformMatrix2fv(u.uAniso, false, aniso || ROUND)
   gl.uniform3f(u.uL, L3[0], L3[1], L3[2])
+  gl.uniform3f(u.uClip, clip ? clip.cx : 0, clip ? clip.cy : 0, clip ? clip.R : 0)
   gl.drawArrays(gl.TRIANGLES, 0, 3)
   // pass 2: a glyph per cell
   u = G.p2.u
