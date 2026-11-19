@@ -20,7 +20,7 @@ import { pathAt, setInfall, followAt, INFALL, BLUE, DUST, stroke, FRAME_PAD, tal
 // ---------- the copy: type your own here ----------
 export const ABOUT = {
   kicker: 'about',
-  text: 'A short paragraph about you. Where you study, what pulls you in, and what you want to work on next. Two or three sentences is plenty.',
+  text: "I'm a computer engineering student at the University of Alberta, I'm into ML infrastructure, and figuring out how to tell when a model is actually right. When I am not working, I am probably snowboarding, hiking or on a cool trip taking pictures.",
 }
 
 // ---------- the beats, in screens of scroll (the asteroid hits the name at 2.68, asteroid.js) ----------
