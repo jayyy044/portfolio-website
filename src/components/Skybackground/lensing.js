@@ -16,6 +16,13 @@ const DISTANCE = 14 // camera distance from the hole, in its masses: closer bend
 const TABLE = 1024 // rays in the bend table
 const SKY_GROWS = 1 // how much the sky grows (or shrinks) with the hole as it changes from its intro size: 1 = as much, so the sky bends as calmly as in the intro; 0 = not at all, so the bigger the hole gets, the further across the sky the bending reaches (it warps the whole screen)
 
+// The experience section's camera (grid.js camera() sets it, every frame past the story's end). While on, the sky
+// stays where the story left it instead of riding along with the hole: sky (the hole before it moved, as the story's
+// camera left it) and hR (the hole's radius then) fix where it sits and how big it is, and yaw and pitch (radians) turn
+// it as that camera turns. Without this the sky shrinks with the hole as the camera pulls back, until it wraps round
+// itself several times across the screen (swirling rings)
+export const SKY_VIEW = { on: false, sky: null, hR: 0, yaw: 0, pitch: 0 }
+
 // the shadow's angular radius seen from distance D (in masses)
 const shadowAngle = (D) => Math.asin((Math.sqrt(27) * Math.sqrt(1 - 2 / D)) / D)
 
@@ -213,7 +220,9 @@ export function createLensing() {
         cv.height = ch
       }
       gl.viewport(0, 0, cw, ch)
-      const yaw = YAW + SPIN * (t - INTRO_END), pitch = PITCH + PITCH_FROM_TILT * sky.inc // the sky's pose, so it doesn't tip as the disk levels
+      const v = SKY_VIEW.on ? SKY_VIEW : null, hR = v ? v.hR : h.R
+      if (v) sky = v.sky
+      const yaw = YAW + SPIN * (t - INTRO_END) + (v ? v.yaw : 0), pitch = PITCH + PITCH_FROM_TILT * sky.inc - (v ? v.pitch : 0) // the sky's pose, so it doesn't tip as the disk levels
       const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch)
       gl.uniformMatrix3fv(u.M, false, new Float32Array([cy, sp * sy, -cp * sy, 0, cp, sp, sy, -sp * cy, cp * cy]))
       const rs = h.R * 0.98 * scale
@@ -222,7 +231,7 @@ export function createLensing() {
       gl.uniform1f(u.rs, rs)
       gl.uniform1f(u.thSh, thSh)
       gl.uniform1f(u.f, rs / thSh)
-      const f0 = (sky.R * Math.pow(h.R / sky.R, SKY_GROWS) * 0.98 * scale) / thSh, dx = (h.cx - sky.cx) * scale, dy = (h.cy - sky.cy) * scale, l = Math.hypot(dx, dy), a = l / f0
+      const f0 = (sky.R * Math.pow(hR / sky.R, SKY_GROWS) * 0.98 * scale) / thSh, dx = (h.cx - sky.cx) * scale, dy = (h.cy - sky.cy) * scale, l = Math.hypot(dx, dy), a = l / f0
       gl.uniform2f(u.cb, sky.cx * scale, sky.cy * scale)
       gl.uniform1f(u.f0, f0)
       gl.uniform3f(u.hd, l > 1e-4 ? (Math.sin(a) * dx) / l : 0, l > 1e-4 ? (-Math.sin(a) * dy) / l : 0, -Math.cos(a)) // the hole's direction in the sky's frame

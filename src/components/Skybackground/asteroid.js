@@ -155,13 +155,13 @@ export function createAsteroid(W, H, dpr, B, N, A) {
   T.impact = { x: Mx, y: My, dx: T.dir[0], dy: T.dir[1], hits, s: Math.min(HIT, ...hits), rock: (s) => { const F = stateAt(T, s, {}); return [F.x, F.y] } }
   return T
 }
-function canvas(w, h) {
+export function canvas(w, h) {
   const c = document.createElement('canvas')
   c.width = w
   c.height = h
   return [c, c.getContext('2d')]
 }
-const glowsOf = (W, H) => GLOWS.map(([k, blur, amt]) => { const [c, cx] = canvas(Math.max(1, Math.round(W / k)), Math.max(1, Math.round(H / k))); return { c, cx, blur, amt } })
+export const glowsOf = (W, H) => GLOWS.map(([k, blur, amt]) => { const [c, cx] = canvas(Math.max(1, Math.round(W / k)), Math.max(1, Math.round(H / k))); return { c, cx, blur, amt } })
 
 // The path after the hit, as a table. The orbit's plane: x along the screen from the hole's centre, y toward us, which
 // shows on screen as up, foreshortened by ORBIT_TILT. In it the line in is still a straight line; from the hit it bends
@@ -583,7 +583,7 @@ function contacts(T, N) {
 // hot white), lum its brightness; ch is a character; back: the layer behind the hole; warm: in the hole's own colours,
 // not the fire's. Under the about-me's text some cells are left out (T.knock: about.js knockOf), cell by cell on the
 // hole's grid, so the field parts round the type
-function put(T, ch, x, y, heat, lum, back, warm = 0) {
+export function put(T, ch, x, y, heat, lum, back, warm = 0) {
   if (T.knock) {
     const k = T.knock(x, y)
     if (k > 0 && hash(Math.floor(x / T.A.CW) + 7919, Math.floor(y / T.A.CH) + 104729) < k) return
@@ -753,7 +753,7 @@ function prep(T, s, t, cam, knock, h) {
   return F
 }
 // one layer's glyphs onto its canvas, then its glow; the one behind has what the hole hides cut out of it first
-function render(T, back) {
+export function render(T, back) {
   let any = false
   for (const [key, b] of T.buckets) if (b.n && (key >= BACK) === !!back) { any = true; break }
   if (!any) return false

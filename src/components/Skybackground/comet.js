@@ -15,6 +15,31 @@ const BALL = 0.6 // the rock's radius, in nucleus radii (asteroid.js SIZE): it i
 const LUMPS = 0.06 // how lumpy the ball is: 0 = a perfect sphere (pits and boulders still on it)
 const ROLL = 0.075 // how fast it tumbles, radians a second on the page's clock (Skybackground's SPEED runs that clock)
 const SCROLL_ROLL = 0.42 // and how far the scroll turns it, radians a screen of scroll
+// grid.js's small rocks (drawRocks): the same rock, light and glyphs, but
+const SMALL_CELL = 3.0, SMALL_CELL_PHONE = 3.0 // finer letter cells, css px wide (each 1.667 times as tall): more of them across a small rock
+const SMALL_RAKE = 1.4 // the hole's light this far round toward us (low: it rakes across them, a lit side and a dark side)
+const SMALL_CONTRAST = 1.2 // and how fast their light falls off from there into shadow (the story's: 1.05; higher: a bright lit edge, a dark body, as the comet's rock)
+const SMALL_EXPOSE = 0.7 // how bright their lit faces are before they turn to glyphs (the story's: 1.15; higher saturates them to a blob of @)
+const SMALL_FILL = 0.25 // and a faint blue light from the sheet under them, strongest on their undersides, so their dark side shows as rock in shadow, not a hole (0 = none)
+const SMALL_AMBIENT = 0.55 // how much of that fill reaches the faces turned away from the sheet too
+const SMALL_GAIN = 1.3 // how bright their glyphs are against the story's (fine glyphs are thin: they need a little)
+const SMALL_SHADOW_EDGE = 12 // how sharp the shadows it casts on itself are (the story's: 22; softer: light spills into its craters, so they don't read as holes)
+const SMALL_LIT = [0.88, 0.91, 0.97] // their colour where the hole's light falls full on them (grey rock, warmed by that light)
+const SMALL_SHADE = [0.5, 0.47, 0.45] // and where it barely reaches (cool grey: real asteroids are grey to charcoal, a little warm at most)
+const SMALL_MOTTLE = 0.45 // how patchy their surface is, lighter and darker ground (the story's: 0.18)
+const SMALL_ROUGH = 0.06 // rough ground all over them, bumps at two scales (0 = smooth)
+const SMALL_CREASE = 0.05 // and creases between the bumps
+const SMALL_KNOBS = 0.9 // smaller lumps on their big ones (against ROCK_LUMPS, grid.js), so their outline is a potato's, not a loaf's
+// their craters: few and big bowls, so they read in glyphs (none of the story rock's small pits, fine ridges or boulders)
+const SMALL_CRATERS = 1.6 // how many: craters are scattered this densely over it (lower = fewer and further apart)
+const SMALL_CRATER_SIZE = 0.36 // how big each is, against the space it has (0..0.5; each varies 40% either way, so no two match)
+const SMALL_CRATER_SHARE = 0.5 // the share of the places a crater could be that have one
+const SMALL_CRATER_DEPTH = 0.5 // how deep its bowl is, against its radius (shallow: the far wall catches the light)
+const SMALL_CRATER_RIM = 0.4 // how high its rim stands, against its depth (it catches the light: a crater, not a hole)
+// sunk in its dent: what of it is under the sheet (seen past its dent's near rim) is hidden; just above the sheet it is
+// shaded to this much of its light (contact)
+const SMALL_CONTACT = 0.7
+const SMALL_EMBED_ROUGH = 0.12 // how rough the dent's rim is round it (its units: 0 = smooth, the line it sinks under is clean)
 // the rock's letters
 const EXPOSURE = 0.98 // how bright the surface is before it is turned into glyphs: higher = denser, brighter glyphs
 const SHAPE_GAMMA = 1.6 // how hard a cell's glyph is matched to its bright side: higher = crisper edges
@@ -47,15 +72,25 @@ float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.-2.*f);
   return mix(mix(mix(h31(i), h31(i+vec3(1,0,0)), f.x), mix(h31(i+vec3(0,1,0)), h31(i+vec3(1,1,0)), f.x), f.y),
              mix(mix(h31(i+vec3(0,0,1)), h31(i+vec3(1,0,1)), f.x), mix(h31(i+vec3(0,1,1)), h31(i+vec3(1,1,1)), f.x), f.y), f.z); }
 `
-// pass 1: the rock, 4 x 6 samples a cell; rgb its light, a how much of it is there (its silhouette)
-const FS1 = `#version 300 es
+// pass 1: the rock, 4 x 6 samples a cell; rgb its light, a how much of it is there (its silhouette). small: grid.js's
+// rocks, each its own shape (a stretched ball cut by a few flat faces, lumps on it) and seed (where its craters
+// fall), from uniforms, with a few big craters (SMALL_CRATER*) in place of the story rock's many small pits, fine
+// ridges and boulders (smaller than their letter cells), and lit also by a faint blue fill from the sheet (uFill, uAmb);
+// drawn every frame, so cheaper: marched more coarsely, shorter shadow rays; else the story's ball
+const rockFS = (small) => `#version 300 es
 precision highp float;
 uniform vec2 uOrigin, uStep, uC;
 uniform float uR;
 uniform mat3 uRot;
 uniform mat2 uAniso; // the stretch undone: screen (y up, in rock radii) -> the round rock's own frame
 uniform vec3 uL;
-uniform vec3 uClip; // a circle (centre, radius, css px) it is not drawn inside: the hole's shadow eating it (radius 0: none)
+uniform vec3 uClip; // a circle (centre, radius, css px) it is not drawn inside: the hole's shadow eating it (radius 0: none)${small ? `
+uniform vec4 uShape, uCut[4]; // its semi-axes and lumps; its flat faces (normal, how far out)
+uniform vec3 uSeed;
+uniform float uDom; // the sphere it fits in, squared, in its radii
+uniform vec4 uFill; // a faint blue light from below (the sheet's): where from, how strong
+uniform float uAmb; // how much of it reaches every face
+uniform vec4 uSink, uSink2; // the sheet round it: (the way up: its y, z), its centre's height above its dent's bottom, the dent's depth; the well's slope (x, y, z), the dent's width` : ''}
 out vec4 o;
 ${NOISE}
 float sdEll(vec3 p, vec3 r){ float k0 = length(p/r), k1 = length(p/(r*r)); return k0*(k0-1.)/k1; }
@@ -63,14 +98,22 @@ float smin(float a, float b, float k){ float h = clamp(.5+.5*(b-a)/k, 0., 1.); r
 float smax(float a, float b, float k){ return -smin(-a, -b, k); }
 float cut(vec3 q, vec3 n, float o){ return dot(q, normalize(n)) - o; }
 // a ball, a little lumpy (its pits, terraces and boulders are added on top)
-float base(vec3 p){ return length(p) - ${BALL.toFixed(3)} + ${LUMPS.toFixed(3)}*(n3(p*1.6 + 4.) - 0.5); }
+float base(vec3 p){ ${small ? `float a = sdEll(p, uShape.xyz);
+  for (int i = 0; i < 4; i++) a = smax(a, cut(p, uCut[i].xyz, uCut[i].w), 0.06);
+  return a + uShape.w*(n3((p + uSeed)*1.6 + 4.) - 0.5 + ${SMALL_KNOBS.toFixed(3)}*(n3((p + uSeed)*3.7 + 1.) - 0.5));` : `return length(p) - ${BALL.toFixed(3)} + ${LUMPS.toFixed(3)}*(n3(p*1.6 + 4.) - 0.5);`} }
 // pits with steep walls and raised lips, and boulders: nearest feature point of a jittered 2x2x2 neighbourhood
 vec2 vor(vec3 q){ vec3 i = floor(q - 0.5); float best = 9.; vec3 id = i;
   for (int z = 0; z <= 1; z++) for (int y = 0; y <= 1; y++) for (int x = 0; x <= 1; x++){
     vec3 c = i + vec3(x, y, z); float dd = length(q - c - h33(c)); if (dd < best){ best = dd; id = c; } }
   return vec2(best, h31(id + 7.7)); }
 float detail(vec3 p){
-  float rough = smoothstep(0.38, 0.62, n3(p*1.7 + 9.));
+${small ? `  float d = 0.05*(n3(p*2.4)*0.65 + n3(p*4.7 + 3.)*0.35 - 0.5);
+  float rb = n3(p*5.5 + 7.)*0.6 + n3(p*11. + 2.)*0.4, rg = 1. - abs(2.*n3(p*6.3 + 5.) - 1.);
+  d += ${SMALL_ROUGH.toFixed(3)}*(rb - 0.5) - ${SMALL_CREASE.toFixed(3)}*rg*rg;
+  vec2 v = vor(p*${SMALL_CRATERS.toFixed(3)});
+  float pr = ${SMALL_CRATER_SIZE.toFixed(3)}*(0.6 + 0.8*fract(v.y*13.1)), x = v.x/pr, dp = ${SMALL_CRATER_DEPTH.toFixed(3)}*pr/${SMALL_CRATERS.toFixed(3)};
+  if (v.y < ${SMALL_CRATER_SHARE.toFixed(3)}) d += dp*(max(0., 1. - x*x) - ${SMALL_CRATER_RIM.toFixed(3)}*exp(-(x - 1.)*(x - 1.)*9.));
+` : `  float rough = smoothstep(0.38, 0.62, n3(p*1.7 + 9.));
   vec3 ax = normalize(vec3(0.22, 1., 0.18));
   float s = dot(p, ax)*7.5 + 2.6*n3(p*1.9 + 5.) + 0.8*n3(p*4.3 + 1.);
   float terr = floor(s) + smoothstep(0.6, 1., fract(s)) - s;
@@ -82,17 +125,20 @@ float detail(vec3 p){
   if (v.y < 0.36) d += 0.055*smoothstep(1.0, 0.72, x) - 0.012*exp(-(x - 1.05)*(x - 1.05)*28.);
   vec2 bo = vor(p*10.5 + 3.3);
   float bx = bo.x/0.36; if (bo.y < 0.3) d -= 0.011*pow(max(0., 1. - bx*bx), 1.5);
-  return d;
+`}  return d;
 }
 float sdf(vec3 w){
   vec3 p = uRot*w; float d0 = base(p);
-  if (d0 > 0.12) return d0 - 0.08;
-  return d0 + detail(p);
+  if (d0 > ${small ? '0.22' : '0.12'}) return d0 - ${small ? '0.18' : '0.08'};
+  return d0 + detail(p${small ? ' + uSeed' : ''});
 }
-vec3 nrmAt(vec3 p){ const vec2 k = vec2(1,-1); float e = 0.0035;
+${small ? `// how far P is above the sheet round it (its dent, a bowl, on the well's slope): below it, negative
+float above(vec3 P){ vec3 W = vec3(0., uSink.x, uSink.y); float h = dot(P, W); vec3 ph = P - h*W;
+  return h + uSink.z - uSink.w*(1. - uSink2.w*inversesqrt(dot(ph, ph) + uSink2.w*uSink2.w)) - dot(ph, uSink2.xyz); }
+` : ''}vec3 nrmAt(vec3 p){ const vec2 k = vec2(1,-1); float e = 0.0035;
   return normalize(k.xyy*sdf(p+k.xyy*e) + k.yyx*sdf(p+k.yyx*e) + k.yxy*sdf(p+k.yxy*e) + k.xxx*sdf(p+k.xxx*e)); }
 float shadow(vec3 ro, vec3 rd){ float res = 1., t = 0.02;
-  for (int i = 0; i < 28; i++){ float h = sdf(ro + rd*t); res = min(res, 22.*h/t); t += clamp(h*0.8, 0.012, 0.12); if (res < 0.002 || t > 2.0) break; }
+  for (int i = 0; i < ${small ? 12 : 28}; i++){ float h = sdf(ro + rd*t); res = min(res, ${small ? SMALL_SHADOW_EDGE.toFixed(1) : '22.'}*h/t); t += clamp(h*0.8, 0.012, 0.12); if (res < 0.002 || t > 2.0) break; }
   return smoothstep(0., 1., clamp(res, 0., 1.)); }
 float ao(vec3 p, vec3 n){ float oc = 0., sc = 1.;
   for (int i = 0; i < 4; i++){ float h = 0.02 + 0.06*float(i); float d = sdf(p + n*h); oc += (h - d)*sc; sc *= 0.75; }
@@ -102,28 +148,32 @@ void main(){
   vec2 d = p - uC;
   vec3 col = vec3(0.); float occ = 0., hit = 0.;
   vec2 q = uAniso*(vec2(d.x, -d.y)/uR); float qq = dot(q, q);
-  if (qq < 1.25 && length(p - uClip.xy) >= uClip.z){
-    float zs = sqrt(1.25 - qq), tt = 0.; vec3 ro = vec3(q, zs);
-    for (int i = 0; i < 80; i++){ float dd = sdf(ro - vec3(0, 0, tt)); if (dd < 0.0012){ hit = 1.; break; } tt += dd*0.56; if (tt > 2.*zs) break; }
+  if (qq < ${small ? 'uDom' : '1.25'} && length(p - uClip.xy) >= uClip.z){
+    float zs = sqrt(${small ? 'uDom' : '1.25'} - qq), tt = 0.; vec3 ro = vec3(q, zs);
+    for (int i = 0; i < 80; i++){ float dd = sdf(ro - vec3(0, 0, tt)); if (dd < ${small ? '0.005' : '0.0012'}){ hit = 1.; break; } tt += dd*${small ? '0.85' : '0.56'}; if (tt > 2.*zs) break; }
     if (hit > 0.){
       vec3 pw = ro - vec3(0, 0, tt), n = nrmAt(pw), pb = uRot*pw;
       float ci = dot(n, uL), lamb = max(ci, 0.), ce = max(n.z, 0.);
       float diff = mix(lamb, 2.*lamb/(lamb + ce + 0.1), 0.25);
       float sh = ci > 0. ? shadow(pw + n*0.01, uL) : 0., a = ao(pw, n);
-      float alb = 1. + 0.18*(n3(pb*3.1 + 11.) - 0.5);
-      float I = clamp(diff*sh*alb*mix(0.45, 1., a)*1.15, 0., 1.);
-      float v = pow(I, 1.05); v = mix(v, v*v*(3. - 2.*v), 0.55);
-      vec3 hue = v < 0.3 ? mix(vec3(1.0, 0.4, 0.13), vec3(1.0, 0.58, 0.27), v/0.3)
+      float alb = 1. + ${small ? SMALL_MOTTLE.toFixed(3) : '0.18'}*(n3(${small ? '(pb + uSeed)' : 'pb'}*3.1 + 11.) - 0.5${small ? ' + 0.5*(n3((pb + uSeed)*7.3 + 2.) - 0.5)' : ''});
+      float I = clamp(diff*sh*alb*mix(0.45, 1., a)*${small ? SMALL_EXPOSE.toFixed(3) : '1.15'}, 0., 1.);
+      float v = pow(I, ${small ? SMALL_CONTRAST.toFixed(3) : '1.05'}); v = mix(v, v*v*(3. - 2.*v), 0.55);
+${small ? `      vec3 hue = mix(vec3(${SMALL_SHADE.map((c) => c.toFixed(3))}), vec3(${SMALL_LIT.map((c) => c.toFixed(3))}), smoothstep(0., 0.8, v));
+` : `      vec3 hue = v < 0.3 ? mix(vec3(1.0, 0.4, 0.13), vec3(1.0, 0.58, 0.27), v/0.3)
                : v < 0.7 ? mix(vec3(1.0, 0.58, 0.27), vec3(1.0, 0.8, 0.58), (v - 0.3)/0.4)
                : mix(vec3(1.0, 0.8, 0.58), vec3(1.0, 0.93, 0.82), (v - 0.7)/0.3);
-      vec3 lit = hue*(v/(dot(hue, vec3(0.3, 0.52, 0.18))*0.55 + 0.45));
+`}      vec3 lit = hue*(v/(dot(hue, vec3(0.3, 0.52, 0.18))*0.55 + 0.45));
       float limb = smoothstep(0.6, 0.04, n.z), dark = smoothstep(0.15, -0.2, ci)*(1. - sh*step(0., ci));
-      col = lit + vec3(0.42, 0.6, 1.0)*0.55*limb*dark*(0.5 + 0.5*a) + vec3(0.02, 0.025, 0.04)*a;
-      occ = 1.;
+      col = lit + vec3(0.42, 0.6, 1.0)*0.55*limb*dark*(0.5 + 0.5*a) + vec3(0.02, 0.025, 0.04)*a;${small ? ` col += vec3(0.42, 0.6, 1.0)*uFill.w*mix(uAmb, 1., max(dot(n, uFill.xyz), 0.))*mix(0.45, 1., a);
+      float rim = ${SMALL_EMBED_ROUGH.toFixed(3)}*(n3(pw*4.5 + uSeed) - 0.5), sunk = 1e9; for (int i = 0; i < 8; i++) sunk = min(sunk, above(ro + vec3(0., 0., 3. - (3. + tt)*float(i)/7.)) + rim);
+      col *= sunk < 0. ? 0. : mix(${SMALL_CONTACT.toFixed(3)}, 1., smoothstep(0., 0.1, above(pw) + rim));` : ''}
+      occ = ${small ? 'sunk < 0. ? 0. : 1.' : '1.'};
     }
   }
   o = vec4(min(col, vec3(1.)), occ);
 }`
+const FS1 = rockFS(false)
 // pass 2: per cell, six region values -> contrast -> the nearest glyph by shape (or a density step where it's flat)
 const FS2 = `#version 300 es
 precision highp float;
@@ -443,6 +493,7 @@ function init() {
   cv.addEventListener('webglcontextrestored', () => { if (G === g) G = null })
   g.glow = document.createElement('canvas')
   g.gx = g.glow.getContext('2d')
+  g.prog = prog // drawRocks compiles its own pass 1 the first time it is used
   return g
 }
 
@@ -515,14 +566,8 @@ function build(W, H, dpr, cw) {
 // False if it can't (no WebGL2, or the GPU has gone away): the caller draws something else
 export function drawComet(ctx, o) {
   try {
-    if (G === null) G = init()
-    if (!G || G.lost) return false
-    // rebuilt for a new screen, and once more when the font arrives (the atlas is drawn in it)
-    const cw = o.W < PHONE ? CELL_PHONE : CELL, key = [o.W, o.H, o.dpr, cw, !!document.fonts?.check(`500 44px ${MONO}`)].join()
-    if (G.key !== key) {
-      build(o.W, o.H, o.dpr, cw)
-      G.key = key
-    }
+    const cw = ready(o.W, o.H, o.dpr)
+    if (!cw) return false
     draw(ctx, o, cw)
     return true
   } catch (e) {
@@ -530,6 +575,18 @@ export function drawComet(ctx, o) {
     G = false
     return false
   }
+}
+// the context and its targets for this screen: the rock's cell width, or 0 if there is no WebGL2 (or the GPU has gone)
+function ready(W, H, dpr) {
+  if (G === null) G = init()
+  if (!G || G.lost) return 0
+  // rebuilt for a new screen, and once more when the font arrives (the atlas is drawn in it)
+  const cw = W < PHONE ? CELL_PHONE : CELL, key = [W, H, dpr, cw, !!document.fonts?.check(`500 44px ${MONO}`)].join()
+  if (G.key !== key) {
+    build(W, H, dpr, cw)
+    G.key = key
+  }
+  return cw
 }
 
 const ROUND = new Float32Array([1, 0, 0, 1])
@@ -583,20 +640,7 @@ function draw(ctx, { W, H, dpr, x, y, r, h, s, t, vis, aniso, clip }, cw) {
   gl.useProgram(G.p2.p)
   gl.bindFramebuffer(gl.FRAMEBUFFER, G.fC)
   gl.viewport(0, 0, cols, rows)
-  bind(0, G.tS, u.uS)
-  bind(1, G.tG, u.uG)
-  gl.uniform2f(u.uSRes, G.sw, G.sh)
-  gl.uniform1i(u.uNG, G.NG)
-  gl.uniform1f(u.uExp, EXPOSURE)
-  gl.uniform1f(u.uGam, SHAPE_GAMMA)
-  gl.uniform1f(u.uDirG, SHAPE_CONTRAST)
-  gl.uniform1f(u.uB0, FLOOR)
-  gl.uniform1f(u.uB1, GAIN)
-  gl.uniform1f(u.uEdge, EDGE)
-  gl.uniform1f(u.uEdgeI, EDGE_ROCK)
-  gl.uniform1iv(u.uRamp, G.RAMP)
-  gl.uniform1i(u.uNR, G.RAMP.length)
-  gl.drawArrays(gl.TRIANGLES, 0, 3)
+  cells(u)
   // the gas, at reduced resolution (it reads the rock's silhouette from the scene)
   u = G.p4.u
   gl.useProgram(G.p4.p)
@@ -676,4 +720,203 @@ function draw(ctx, { W, H, dpr, x, y, r, h, s, t, vis, aniso, clip }, cw) {
     ctx.globalCompositeOperation = 'source-over'
   }
   ctx.globalAlpha = 1
+}
+
+// ---------------- grid.js's rocks ----------------
+// Small rocks, several a frame: each the story's rock (the same ray march, glyph matching and light from the hole, on
+// finer cells) with its own shape, seed and turn, and no gas or bloom, drawn afresh every frame (drawSmall), onto ctx where
+// it is, in the order given (back to front). o: { W, H, dpr, h (the hole: the light comes from it), rocks: [{ x, y (its
+// centre, css px), r (css px a unit of its shape), rot (its turn, 3 x 3), shape ([ax, ay, az] semi-axes, in units, and how
+// lumpy), cuts (its 4 flat faces: [nx, ny, nz, how far out] each, flat), seed ([3]), ext (the sphere it fits in, units),
+// vis (0..1), sink (the sheet round it, in its units: [cos, sin of the camera's pitch, its centre's height above its dent's
+// bottom, the dent's depth, the well's slope x, y, z, the dent's width]) }] }.
+// False if it can't (no WebGL2, or the GPU has gone away): the caller draws something else
+export function drawRocks(ctx, o) {
+  try {
+    const cw = ready(o.W, o.H, o.dpr)
+    if (!cw) return false
+    if (!G.p6) G.p6 = G.prog(rockFS(true))
+    drawSmall(ctx, o, o.W < PHONE ? SMALL_CELL_PHONE : SMALL_CELL)
+    return true
+  } catch (e) {
+    console.warn('comet: WebGL2 failed, drawing without it', e)
+    G = false
+    return false
+  }
+}
+
+// A small rock's outline, as rockFS(true)'s sdf() draws it (its stretched ball, flat faces, lumps and craters), sampled:
+// for points all over its surface, in its own frame (x along its long axis), each one's [x, distance from that axis], flat.
+// grid.js rolls it about that axis, so how far it reaches any way on screen, however it rolls, follows from these alone
+// (to within SURFACE_SLACK, its units). shape, cuts, seed: as drawRocks takes them. Keep in step with base() and detail()
+export const SURFACE_SLACK = 0.012
+export function surfaceOf(shape, cuts, seed, n = 500) {
+  const fr = (v) => v - Math.floor(v), mix = (a, b, k) => a + (b - a) * k
+  const hp = (x, y, z) => { x = fr(x * 0.1031); y = fr(y * 0.103); z = fr(z * 0.0973); const d = x * (y + 33.33) + y * (x + 33.33) + z * (z + 33.33); return [x + d, y + d, z + d] }
+  const h31 = (x, y, z) => { const [a, b, c] = hp(x, y, z); return fr((a + b) * c) }
+  const n3 = (x, y, z) => {
+    const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z), s = (v) => v * v * (3 - 2 * v), fx = s(x - ix), fy = s(y - iy), fz = s(z - iz), c = (a, b, e) => h31(ix + a, iy + b, iz + e)
+    return mix(mix(mix(c(0, 0, 0), c(1, 0, 0), fx), mix(c(0, 1, 0), c(1, 1, 0), fx), fy), mix(mix(c(0, 0, 1), c(1, 0, 1), fx), mix(c(0, 1, 1), c(1, 1, 1), fx), fy), fz)
+  }
+  const vor = (x, y, z) => { // the nearest jittered point: its distance, and its cell's hash
+    const ix = Math.floor(x - 0.5), iy = Math.floor(y - 0.5), iz = Math.floor(z - 0.5)
+    let best = 9, id = null
+    for (let c = 0; c < 8; c++) {
+      const cx = ix + (c & 1), cy = iy + ((c >> 1) & 1), cz = iz + (c >> 2), [a, b, e] = hp(cx, cy, cz)
+      const dd = Math.hypot(x - cx - fr((a + b) * e), y - cy - fr((a + a) * b), z - cz - fr((b + a) * a))
+      if (dd < best) { best = dd; id = [cx, cy, cz] }
+    }
+    return [best, h31(id[0] + 7.7, id[1] + 7.7, id[2] + 7.7)]
+  }
+  const [rx, ry, rz, lumps] = shape, CR = SMALL_CRATERS
+  const sdf = (x, y, z) => {
+    const k0 = Math.hypot(x / rx, y / ry, z / rz), k1 = Math.hypot(x / (rx * rx), y / (ry * ry), z / (rz * rz))
+    let a = (k0 * (k0 - 1)) / k1
+    for (let i = 0; i < 4; i++) { // smax with each flat face
+      const nx = cuts[4 * i], ny = cuts[4 * i + 1], nz = cuts[4 * i + 2], b = (x * nx + y * ny + z * nz) / Math.hypot(nx, ny, nz) - cuts[4 * i + 3]
+      const h = Math.min(1, Math.max(0, 0.5 + (0.5 * (a - b)) / 0.06))
+      a = -(mix(-b, -a, h) - 0.06 * h * (1 - h))
+    }
+    const px = x + seed[0], py = y + seed[1], pz = z + seed[2]
+    a += lumps * (n3(px * 1.6 + 4, py * 1.6 + 4, pz * 1.6 + 4) - 0.5 + SMALL_KNOBS * (n3(px * 3.7 + 1, py * 3.7 + 1, pz * 3.7 + 1) - 0.5))
+    if (a > 0.22) return a - 0.18 // (as rockFS(true): its detail reaches up to 0.18 out)
+    let d = 0.05 * (n3(px * 2.4, py * 2.4, pz * 2.4) * 0.65 + n3(px * 4.7 + 3, py * 4.7 + 3, pz * 4.7 + 3) * 0.35 - 0.5)
+    const rb = n3(px * 5.5 + 7, py * 5.5 + 7, pz * 5.5 + 7) * 0.6 + n3(px * 11 + 2, py * 11 + 2, pz * 11 + 2) * 0.4, rg = 1 - Math.abs(2 * n3(px * 6.3 + 5, py * 6.3 + 5, pz * 6.3 + 5) - 1)
+    d += SMALL_ROUGH * (rb - 0.5) - SMALL_CREASE * rg * rg
+    const [vx, vy] = vor(px * CR, py * CR, pz * CR), pr = SMALL_CRATER_SIZE * (0.6 + 0.8 * fr(vy * 13.1)), q = vx / pr, dp = (SMALL_CRATER_DEPTH * pr) / CR
+    if (vy < SMALL_CRATER_SHARE) d += dp * (Math.max(0, 1 - q * q) - SMALL_CRATER_RIM * Math.exp(-(q - 1) * (q - 1) * 9))
+    return a + d
+  }
+  const out = new Float32Array(2 * n), far = Math.max(rx, ry, rz) + lumps + 0.2
+  for (let k = 0; k < n; k++) { // a Fibonacci sphere of directions; along each, in from far out to the outermost surface
+    const dy = 1 - (2 * (k + 0.5)) / n, q = Math.sqrt(1 - dy * dy), ph = k * 2.39996, dx = q * Math.cos(ph), dz = q * Math.sin(ph)
+    let t = far
+    while (t > 0.02 && sdf(dx * t, dy * t, dz * t) > 0) t -= 0.015
+    let lo = t, hi = t + 0.015
+    for (let j = 0; j < 7; j++) { const mid = (lo + hi) / 2; if (sdf(dx * mid, dy * mid, dz * mid) > 0) hi = mid; else lo = mid }
+    out[2 * k] = dx * hi
+    out[2 * k + 1] = Math.hypot(dy, dz) * hi
+  }
+  return out
+}
+
+// Each rock, every frame: shaded only over its own box, into its own patch of the GL canvas (packed in rows from the top
+// left, device px), then all are drawn onto ctx where they are, in the order given (back to front)
+function drawSmall(ctx, { dpr, h, rocks }, cw) {
+  const { gl, cv } = G, ch = cw * 1.667, snap = (v) => Math.round(v * dpr) / dpr, done = []
+  let px = 0, py = 0, rowH = 0
+  gl.disable(gl.BLEND)
+  gl.enable(gl.SCISSOR_TEST)
+  gl.clearColor(0, 0, 0, 0)
+  for (const k of rocks) {
+    if (k.vis < 0.002) continue
+    let lx = h.cx - k.x, ly = h.cy - k.y
+    const ll = Math.hypot(lx, ly) || 1
+    k.lx = lx / ll
+    k.ly = ly / ll
+    // its box: as far as its stretched ball, turned, reaches across and up the screen, and the room its lumps take
+    const R = k.rot, A = k.shape, m = k.ext - Math.max(A[0], A[1], A[2])
+    const nx = Math.ceil(((Math.hypot(R[0] * A[0], R[1] * A[1], R[2] * A[2]) + m) * k.r) / cw) + 1, ny = Math.ceil(((Math.hypot(R[3] * A[0], R[4] * A[1], R[5] * A[2]) + m) * k.r) / ch) + 1
+    const cols = 2 * nx, rows = 2 * ny
+    const wd = Math.ceil(cols * cw * dpr), hd = Math.ceil(rows * ch * dpr)
+    if (px + wd > cv.width) { px = 0; py += rowH; rowH = 0 }
+    if (cols > G.maxCols || rows > G.maxRows || wd > cv.width || py + hd > cv.height) continue
+    // its grid, anchored to its centre so its glyphs move with it
+    const ox = snap(k.x - nx * cw), oy = snap(k.y - ny * ch), l3 = Math.hypot(k.lx, k.ly, SMALL_RAKE)
+    // pass 1: it, 4 x 6 samples a cell
+    let u = G.p6.u
+    gl.useProgram(G.p6.p)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, G.fS)
+    gl.scissor(0, 0, Math.min(G.sw, cols * 4 + 4), Math.min(G.sh, rows * 6 + 6)) // a cell's border emptied first: passes 2 and 3 read a little past its edge
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.viewport(0, 0, cols * 4, rows * 6)
+    gl.scissor(0, 0, cols * 4, rows * 6)
+    gl.uniform2f(u.uOrigin, ox, oy)
+    gl.uniform2f(u.uStep, cw / 4, ch / 6)
+    gl.uniform2f(u.uC, k.x, k.y)
+    gl.uniform1f(u.uR, k.r)
+    gl.uniformMatrix3fv(u.uRot, false, new Float32Array(k.rot))
+    gl.uniformMatrix2fv(u.uAniso, false, ROUND)
+    gl.uniform3f(u.uL, k.lx / l3, -k.ly / l3, SMALL_RAKE / l3)
+    gl.uniform3f(u.uClip, 0, 0, 0)
+    gl.uniform4fv(u.uShape, new Float32Array(k.shape))
+    gl.uniform4fv(u.uCut, new Float32Array(k.cuts))
+    gl.uniform3fv(u.uSeed, new Float32Array(k.seed))
+    gl.uniform1f(u.uDom, k.ext * k.ext)
+    gl.uniform4f(u.uFill, 0, -0.5, 0.866, SMALL_FILL) // from below and in front: the sheet, under it and toward us
+    gl.uniform1f(u.uAmb, SMALL_AMBIENT)
+    gl.uniform4f(u.uSink, k.sink[0], k.sink[1], k.sink[2], k.sink[3])
+    gl.uniform4f(u.uSink2, k.sink[4], k.sink[5], k.sink[6], k.sink[7])
+    gl.drawArrays(gl.TRIANGLES, 0, 3)
+    // pass 2: a glyph per cell
+    gl.useProgram(G.p2.p)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, G.fC)
+    gl.viewport(0, 0, cols, rows)
+    gl.scissor(0, 0, cols, rows)
+    cells(G.p2.u)
+    // pass 3: its glyphs at device resolution, into its patch
+    u = G.p3.u
+    gl.useProgram(G.p3.p)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.viewport(0, 0, cv.width, cv.height)
+    gl.scissor(px, cv.height - py - hd, wd, hd)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    bindTex(0, G.tC, u.uCells)
+    bindTex(1, G.tA, u.uAtlas)
+    bindTex(2, G.tS, u.uS)
+    gl.uniform2f(u.uACell, G.ACELL[0], G.ACELL[1])
+    gl.uniform2f(u.uARes, G.ARES[0], G.ARES[1])
+    gl.uniform2f(u.uPad, G.APAD, G.APAD)
+    gl.uniform1i(u.uACols, G.ACOLS)
+    gl.uniform2f(u.uOrigin, px / dpr, py / dpr)
+    gl.uniform2f(u.uCell, cw, ch)
+    gl.uniform2f(u.uSRes, G.sw, G.sh)
+    gl.uniform2f(u.uGrid, cols, rows)
+    gl.uniform1f(u.uDpr, dpr)
+    gl.uniform1f(u.uHd, cv.height)
+    gl.drawArrays(gl.TRIANGLES, 0, 3)
+    done.push([px, py, wd, hd, Math.round(ox * dpr), Math.round(oy * dpr), k.vis])
+    px += wd
+    rowH = Math.max(rowH, hd)
+  }
+  gl.disable(gl.SCISSOR_TEST)
+  gl.activeTexture(gl.TEXTURE0)
+  // then each onto the page where it is (opaque: it hides what is behind it), and its light again over it (SMALL_GAIN)
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  for (const [sx, sy, w, hh, dx, dy, a] of done) {
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = a
+    ctx.drawImage(cv, sx, sy, w, hh, dx, dy, w, hh)
+    if (SMALL_GAIN > 1) {
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.globalAlpha = a * (SMALL_GAIN - 1)
+      ctx.drawImage(cv, sx, sy, w, hh, dx, dy, w, hh)
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.globalAlpha = 1
+}
+function bindTex(unit, t, loc) {
+  const { gl } = G
+  gl.activeTexture(gl.TEXTURE0 + unit)
+  gl.bindTexture(gl.TEXTURE_2D, t)
+  gl.uniform1i(loc, unit)
+}
+// pass 2's settings (its program in use): the scene in, the glyphs' shapes, how they are matched
+function cells(u) {
+  const { gl } = G
+  bindTex(0, G.tS, u.uS)
+  bindTex(1, G.tG, u.uG)
+  gl.uniform2f(u.uSRes, G.sw, G.sh)
+  gl.uniform1i(u.uNG, G.NG)
+  gl.uniform1f(u.uExp, EXPOSURE)
+  gl.uniform1f(u.uGam, SHAPE_GAMMA)
+  gl.uniform1f(u.uDirG, SHAPE_CONTRAST)
+  gl.uniform1f(u.uB0, FLOOR)
+  gl.uniform1f(u.uB1, GAIN)
+  gl.uniform1f(u.uEdge, EDGE)
+  gl.uniform1f(u.uEdgeI, EDGE_ROCK)
+  gl.uniform1iv(u.uRamp, G.RAMP)
+  gl.uniform1i(u.uNR, G.RAMP.length)
+  gl.drawArrays(gl.TRIANGLES, 0, 3)
 }

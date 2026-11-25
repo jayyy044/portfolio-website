@@ -2,14 +2,15 @@
 // name, time slows (it keeps falling, slowly) and the camera pushes in on the rock and glides it onto a track down the
 // screen, the way it is falling; nothing is scaled as a picture: the rock and its fire are drawn bigger on the same letter
 // grid. A few of the name's pieces whip across, streaked, and wait, small and dim and upright, beside the places their
-// letters will take; the rest fade away. Then the rock writes the about-me as it falls: as it passes each line, the line
-// types itself left to right, each letter scrambling briefly in its own place and locking white hot, then cooling to its
-// colour; a waiting piece slides into its letter as it locks. Wide screens have the text in a block beside the rock's
-// path; tall ones (asteroid.js TALL) hold the rock up in the screen and have the text in a column below it, typing in a
-// wave down from it (TALL_*). It holds, still and readable, while the rock comes to rest near the hole
-// (which sinks out of the text's way), the asteroid's glyph field parting round the type; then, as the rock moves on, the
-// letters break up into the tail's own glyphs and are drawn into its tail, streaming away down it (never toward the
-// hole), and the rock is released: time speeds back up, the rock gets going from rest round the hole and into it
+// letters will take; the rest fade away. Then the rock writes the about-me as it falls: the lines type themselves, top
+// down and ahead of it (all written by TYPE_TO), each left to right, each letter scrambling briefly in its own place and
+// locking white hot, then cooling to its colour; a waiting piece slides into its letter as it locks. Wide screens have the
+// text in a block beside the rock's path, which once written moves toward the middle as the rock falls away (TEXT_MID);
+// tall ones (asteroid.js TALL) hold the rock up in the screen and have the text in a column below it, typing in a wave
+// down from it (TALL_*). It holds, still and readable, while the rock comes to rest near the hole
+// (which sinks out of the text's way), the asteroid's glyph field parting round the type; then, as it settles (DISSOLVE_AT),
+// the letters break up into the tail's own glyphs and are drawn into its tail, streaming away down it (never toward the
+// hole); then the rock is released: time speeds back up, the rock gets going from rest round the hole and into it
 // (asteroid.js setInfall), and the camera hands over to one that follows it in, keeping it and the hole in frame
 // (asteroid.js followAt). All a pure function of the scroll. Reduced motion: no camera; the rock fades out while the
 // text fades in, line by line, and back.
@@ -29,8 +30,11 @@ const SLOW_IN = 0.18 // screens of scroll for time to slow to WRITE_RATE
 const WRITE_RATE = 0.3 // how fast the story runs while the rock writes, against normal: it keeps falling, slowly
 const WHIP_FROM = 2.8, WHIP_TO = 2.98 // the wanted pieces of the name whip across between these; the rest fade away
 const WRITE_FROM = 3 // the camera is in and the rock on its track: it starts writing (the top line)
-const WRITE_TO = 3.85 // and the last letter has locked; then the text holds while the rock comes to rest near the hole
-const CLEAR_AT = 4.4 // the rock is released: it moves on, and the letters start to dissolve into its tail, those nearest it first
+const WRITE_TO = 3.85 // the rock's pace: it goes down its track as if writing the lines until here, then comes to rest near the hole
+const TYPE_TO = 3.35 // the last letter has locked by here (the lines type from WRITE_FROM, faster than the rock falls past them)
+const DISSOLVE_AT = 3.75 // the letters start to dissolve into the rock's tail, those nearest it first, as it comes to rest (on 1855x1035
+// it is about 0.29W 0.65H here, and 0.27W 0.70H at 3.85); they are gone by DISSOLVE_AT + CLEAR_SPREAD + DISSOLVE, before the release
+const CLEAR_AT = 4.4 // the rock is released: it moves on round the hole and in
 const DISSOLVE = 0.35 // screens of scroll each takes, from breaking up to gone down the tail
 const CLEAR_SPREAD = 0.15 // from the first letter going to the last
 const PULL = 0.5 // screens of scroll time takes to get back to full speed after the release (the rock's tumble; its fall keeps its own pace)
@@ -54,11 +58,22 @@ const WAIT_SIZE = 0.6, WAIT_ALPHA = 0 // how big and how bright it is while it w
 const SLIDE = 0.05 // screens of scroll it takes to slide into its letter's place, shrinking and fading, as the letter locks
 const STREAK = 0.012 // screens of scroll between a moving piece and each fading copy behind it (its streak)
 // ---------- the text ----------
-const TEXT_RIGHT = 0.06 // wide screens (the text beside the rock's path): its right margin, in screen widths
+const TEXT_RIGHT = 0.02 // wide screens (the text beside the rock's path): its right margin as it is written, in screen widths (the
+// least it ever has: the lines are as long as that leaves room for, up to MAX_COLS)
 const TEXT_MAX_W = 0.5 // and the most of the screen's width it takes
+const TEXT_REST_RIGHT = 0.05 // its right margin as it rests: it moves left (TEXT_MID) no further than leaves this much on its right
+const PACE_RIGHT = 0.06 // the rock's pace down its track and the hole's sink go by the text as it would be laid out this far from the
+// right (TEXT_RIGHT was 0.06 before the lines got longer), so the rock and the hole move as they did; = TEXT_RIGHT: by the text as it is
+const TEXT_MID = 0.5 // wide screens: once written, the text moves left, its middle toward this far across the screen, in screen widths
+// (no further than keeps it FIRE_CLEAR from the rock as it falls away and TAIL_CLEAR from its tail; 1 = it stays where it was
+// written); it rises as it goes, as little as keeps the hole from sinking any further for it, so the hole and the rock's release
+// are as they were
+const TEXT_FOLLOW = 0.75 // how much of that move it makes: 1 = as far as the clearances let it, 0 = it stays where it was written
+const TEXT_MOVE = 0.6 // screens of scroll it takes to get there, from TYPE_TO (longer lets it follow the tail further as it drifts left)
 const TEXT_SIDE_TALL = 0.07 // tall screens: the least margin either side, in screen widths
 const TEXT_BOTTOM = 0.06 // how far above the bottom edge the text stops, in screen heights (wide screens: it starts level with the rock)
 const FIRE_CLEAR = 2.3 // how far the text keeps from the rock's centre, in its radii (its fire reaches about 1.7, its glow a little more)
+const TAIL_CLEAR = 0.9 // and, as it moves toward the middle (TEXT_MID), from the middle of the rock's tail, in its radii (its bright core reaches about 0.7 from it)
 const HOLE_CLEAR = 0.03 // how far it keeps above the hole's light, in screen heights (the hole sinks out of its way while the camera is in)
 const ROCK_CLEAR = 0.9 // and how far the rock's edge keeps from the hole's centre while it writes and rests, in the hole's radii (it sinks
 // further if need be: tall screens, where the hole is small against the rock). 1 = its edge at the shadow's; 1.7 clears the arch's bright
@@ -119,6 +134,8 @@ export const ROOM_END = CLEAR_AT + INFALL // the page's scroll room, in screens:
 // how close the camera is, and how far onto the rock's track it has glided, 0..1; both go back as time speeds up
 const pulled = (s) => smoother((s - CLEAR_AT) / PULL)
 const closeness = (s) => smoother((s - ZOOM_AT) / (WRITE_FROM - ZOOM_AT)) * (1 - pulled(s))
+const moved = (s) => smoother((s - TYPE_TO) / TEXT_MOVE) // how far the written text has moved toward the middle (wide screens), 0..1
+const toGo = (X, s) => (X.reduced ? 0 : 1 - moved(s)) // how much of that move it still has to make (X.slide: the move, px; its place is where it ends up)
 const farness = (s) => smoother((s - ZOOM_AT) / FAR_IN) * (1 - pulled(s)) // the same for the far things
 // how far the hole has sunk out of the text's way: it only comes back up once the last letter has gone
 const sunk = (s) => smoother((s - ZOOM_AT) / FAR_IN) * (1 - smoother((s - CLEAR_AT - CLEAR_SPREAD - 1.1 * DISSOLVE) / PULL))
@@ -187,7 +204,7 @@ export function createAbout(W, H, dpr, N, T, reduced, copy = ABOUT) {
   const tall = tallOf(W, H), snap = (v) => Math.round(v * dpr) / dpr
   const [cv, x] = canvas(Math.round(W * dpr), Math.round(H * dpr))
   const [glow, gx] = canvas(Math.max(1, Math.round(W / 3)), Math.max(1, Math.round(H / 3)))
-  const X = { W, H, dpr, reduced, cv, x, glow, gx, slots: [], sink: 0, pieces: [], k: WRITE_ZOOM }
+  const X = { W, H, dpr, reduced, cv, x, glow, gx, slots: [], sink: 0, slide: [0, 0], pieces: [], k: WRITE_ZOOM }
   const R = (X.rock = T.ball * T.rr * X.k), clear = FIRE_CLEAR * R // the rock close up, its radius; how far the text keeps from its centre
   // the rock as the writing starts (the camera has pushed in round it there) and the way it falls: its track's start and way.
   // Tall screens: held up in the screen (TALL_ROCK_*), falling on slowly (TALL_FALL)
@@ -212,62 +229,106 @@ export function createAbout(W, H, dpr, N, T, reduced, copy = ABOUT) {
     return { fs, cw, lh, rows, left, top, bottom: rows.at(-1).y + lh / 2 }
   }
   const fs0 = Math.round(Math.max(FONT_MIN, Math.min(FONT_MAX * bigger(W, H), W / (tall ? 26 : 56), H / (tall ? TALL_FONT_H : 34)))), floor = H * (1 - TEXT_BOTTOM)
-  const right = tall ? W * (1 - TEXT_SIDE_TALL) : W * (1 - TEXT_RIGHT)
-  // wide screens: a block beside the rock's path, its left edge clear of the rock where it passes the top line (it falls away left from there)
-  const left = tall ? W * TEXT_SIDE_TALL : Math.min(right - 12 * fs0 * 0.6, Math.max(right - TEXT_MAX_W * W, X.start[0] + clear))
   // tall screens: the top line clear below the rock where it comes to rest (its fire faces the text: it falls toward it)
-  const top = tall ? trackAt(X, Infinity)[1] + clear : X.start[1]
-  let L
-  for (let fs = fs0; fs >= FONT_MIN; fs--) { // as big as fits above the floor
-    L = lay(fs, top, left, right)
-    if (L.bottom <= floor) break
+  const top = tall ? trackAt(X, Infinity)[1] + clear : X.start[1], T0 = WRITE_FROM + SCRAMBLE, T1 = TYPE_TO - LINE_SWEEP
+  // the copy laid out with its right edge at right, as big as fits above the floor, and its letters (wide screens: a block
+  // beside the rock's path, its left edge clear of the rock where it passes the top line (it falls away left from there),
+  // each line typing itself left to right over LINE_SWEEP, the lines spread down from WRITE_FROM, the top one once the rock is
+  // on its track, level with it, to TYPE_TO by their height)
+  const layout = (right) => {
+    const left = tall ? W * TEXT_SIDE_TALL : Math.min(right - 12 * fs0 * 0.6, Math.max(right - TEXT_MAX_W * W, X.start[0] + clear))
+    let L
+    for (let fs = fs0; fs >= FONT_MIN; fs--) { // as big as fits above the floor
+      L = lay(fs, top, left, right)
+      if (L.bottom <= floor) break
+    }
+    if (L.bottom > floor) L = lay(L.fs, top, left, right, LINE_GAP_MIN) // still too long: tighter lines
+    if (L.bottom > floor) L = lay(L.fs, Math.max(0.05 * H + L.lh / 2, top - (L.bottom - floor)), left, right, LINE_GAP_MIN) // and then it starts higher
+    if (tall) L.left = (W - Math.max(...L.rows.map((r) => r.str.length)) * L.cw) / 2 // a column, centred
+    const y0 = L.rows[0].y, yn = L.rows.at(-1).y
+    L.slots = []
+    L.rows.forEach((r, li) => {
+      r.t = T0 + (yn > y0 ? (r.y - y0) / (yn - y0) : 0) * (T1 - T0)
+      ;[...r.str].forEach((ch, col) => {
+        if (ch !== ' ') L.slots.push({ ch, kick: r.kick, L: li, col, x: snap(L.left + (col + 0.5) * L.cw), y: snap(r.y), j: L.slots.length, at: r.t + (LINE_SWEEP * col) / Math.max(1, r.str.length - 1) })
+      })
+    })
+    return L
   }
-  if (L.bottom > floor) L = lay(L.fs, top, left, right, LINE_GAP_MIN) // still too long: tighter lines
-  if (L.bottom > floor) L = lay(L.fs, Math.max(0.05 * H + L.lh / 2, top - (L.bottom - floor)), left, right, LINE_GAP_MIN) // and then it starts higher
-  if (tall) L.left = (W - Math.max(...L.rows.map((r) => r.str.length)) * L.cw) / 2 // a column, centred
+  // the text, and as it was laid out before its lines got longer (PACE_RIGHT), which the rock's pace and the hole's sink go by
+  const L = layout(tall ? W * (1 - TEXT_SIDE_TALL) : W * (1 - TEXT_RIGHT)), old = tall ? L : layout(W * (1 - PACE_RIGHT))
+  X.slots = L.slots
   X.font = `500 ${L.fs}px ${MONO}`
   X.fs = L.fs
-  L.rows.forEach((r, li) => [...r.str].forEach((ch, col) => {
-    if (ch !== ' ') X.slots.push({ ch, kick: r.kick, L: li, col, x: snap(L.left + (col + 0.5) * L.cw), y: snap(r.y), j: X.slots.length })
-  }))
   X.cw = L.cw
   X.lh = L.lh
   X.cell = [T.A.CW, T.A.CH] // the hole's letter grid, which the asteroid's fire and trail are drawn on
   X.tailFont = T.A.font
 
-  // the writing (wide screens): each line types itself, left to right over LINE_SWEEP, the lines spread down the writing
-  // by their height; the rock goes down its track so that it has passed each line as the line starts, and never slower
-  // than V_MIN. Tall screens: the rock is above the text, and the letters lock in a wave spreading down from it (TALL_WAVE)
-  const y0 = L.rows[0].y, yn = L.rows.at(-1).y, T1 = WRITE_TO - LINE_SWEEP, [, dy] = X.dir
-  for (const r of L.rows) r.t = WRITE_FROM + (yn > y0 ? (r.y - y0) / (yn - y0) : 0) * (T1 - WRITE_FROM)
+  // the rock (wide screens) goes down its track as if it passed each line of the text laid out by PACE_RIGHT as the line
+  // started on WRITE_TO's schedule, and never slower than V_MIN. Tall screens: the rock is above the text, and the letters lock in a wave
+  // spreading down from it (TALL_WAVE)
   if (!tall) {
+    const [, dy] = X.dir, y0 = old.rows[0].y, yn = old.rows.at(-1).y
     X.r0 = Math.max(0, (y0 - X.start[1]) / dy)
-    X.v = Math.max(V_MIN * H, ((yn - X.start[1]) / dy - X.r0) / (T1 - WRITE_FROM))
+    X.v = Math.max(V_MIN * H, ((yn - X.start[1]) / dy - X.r0) / (WRITE_TO - LINE_SWEEP - WRITE_FROM))
   }
-  // it dissolves nearest the rock first (the tail takes those first, and they are the ones nearest the hole as it rises)
-  const [kx, ky] = trackAt(X, CLEAR_AT), dist = X.slots.map((q) => Math.hypot(q.x - kx, q.y - ky)), d0 = Math.min(...dist), d1 = Math.max(...dist)
-  const wave = X.slots.map((q) => Math.hypot(TALL_WAVE * (q.x - kx), q.y - ky)), w0 = Math.min(...wave), w1 = Math.max(...wave)
-  X.slots.forEach((q, i) => {
-    const r = L.rows[q.L]
-    q.at = tall ? WRITE_FROM + ((WRITE_TO - WRITE_FROM) * (wave[i] - w0)) / Math.max(1, w1 - w0) : r.t + (LINE_SWEEP * q.col) / Math.max(1, r.str.length - 1) // it locks
-    q.gone = CLEAR_AT + (CLEAR_SPREAD * (dist[i] - d0)) / Math.max(1, d1 - d0)
-  })
-  if (tall) L.rows.forEach((r, i) => (r.t = Math.min(...X.slots.filter((q) => q.L === i).map((q) => q.at)))) // a line starts with its first letter
+  const [kx, ky] = trackAt(X, CLEAR_AT)
+  if (tall) {
+    const wave = X.slots.map((q) => Math.hypot(TALL_WAVE * (q.x - kx), q.y - ky)), w0 = Math.min(...wave), w1 = Math.max(...wave)
+    X.slots.forEach((q, i) => (q.at = WRITE_FROM + ((TYPE_TO - WRITE_FROM) * (wave[i] - w0)) / Math.max(1, w1 - w0))) // it locks
+    L.rows.forEach((r, i) => (r.t = Math.min(...X.slots.filter((q) => q.L === i).map((q) => q.at)))) // a line starts with its first letter
+  }
+
+  // the hole sinks while the camera is in, as far as keeps the text (laid out as A) above its light, and the rock ROCK_CLEAR
+  // from it (worked out with it unsunk); dx, dy: how far the text has moved by the end of its move toward the middle
+  const sinkFor = (A, dx, dy) => {
+    let sink = 0
+    for (let s = WRITE_FROM; s <= CLEAR_AT + 0.02; s += 0.02) {
+      const c = cameraAt(X, T, s), hx = T.P.cx * c.kf + c.fox, hy = T.P.cy * c.kf + c.foy, hr = T.P.R * c.kf, f = Math.max(0.05, sunk(s)), m = 1 - toGo(X, s)
+      for (const q of A.slots) if (q.at - SCRAMBLE <= s) sink = Math.max(sink, (q.y + dy * m + 0.6 * A.fs + HOLE_CLEAR * H - (hy - holeTop((q.x + dx * m - hx) / hr) * hr)) / f)
+      const P = pathAt(T, storyOf(s), 0), rx = P.x * c.k + c.ox, ry = P.y * c.k + c.oy, g = ROCK_CLEAR * hr + T.ball * T.rr * c.k
+      if (Math.abs(rx - hx) < g) sink = Math.max(sink, (ry + Math.sqrt(g * g - (rx - hx) ** 2) - hy) / f)
+    }
+    return sink
+  }
+  let sink = Math.max(sinkFor(L, 0, 0), sinkFor(old, 0, 0)) // (X.sink stays 0 until it is set, below: these are worked out with the hole unsunk)
+  // wide screens: once it is all written it moves toward the middle (TEXT_MID) as the rock falls away: left, as far as keeps
+  // every letter FIRE_CLEAR from the rock until the release; and up, as little as keeps the hole from having to sink any
+  // further for it (so the hole, and the rock's release, are as they were). Its place from here on is where it ends up
+  if (!tall) {
+    // ponytail: 1% over FIRE_CLEAR covers between these samples and the rock's drift just after the release, which this can't see yet
+    const bw = Math.max(...L.rows.map((r) => r.str.length)) * L.cw // the block's width
+    let D = Math.max(0, L.left + bw / 2 - TEXT_MID * W)
+    const keep = (q, e, x, y, d) => { if (q.x > x && Math.abs(q.y - y) < d) D = Math.min(D, (q.x - x - Math.sqrt(d * d - (q.y - y) ** 2)) / e) } // no nearer than d to x, y
+    for (let s = TYPE_TO; s <= CLEAR_AT; s += 0.01) {
+      const e = moved(s), c = cameraAt(X, T, s), P = pathAt(T, storyOf(s), 0), tail = e > 0 && tailAt(X, T, s, c)
+      if (!tail) continue
+      for (const q of X.slots) {
+        keep(q, e, P.x * c.k + c.ox, P.y * c.k + c.oy, 1.01 * clear)
+        for (let i = 0; i <= TAIL_N; i++) keep(q, e, tail[2 * i], tail[2 * i + 1], TAIL_CLEAR * R)
+      }
+    }
+    D = snap(Math.max(0, Math.min(Math.max(0, D) * TEXT_FOLLOW, L.left + bw - (1 - TEXT_REST_RIGHT) * W))) // (its right edge TEXT_REST_RIGHT in)
+    let lo = 0, hi = Math.max(0, L.rows[0].y - 0.05 * H - L.lh / 2) // the most it can rise, its top kept on the screen
+    for (let i = 0; i < 20; i++) { const u = (lo + hi) / 2; if (sinkFor(L, -D, -u) > sink) lo = u; else hi = u }
+    X.slide = [D, Math.ceil(hi * dpr) / dpr]
+    sink = Math.max(sink, sinkFor(L, -D, -X.slide[1])) // (more only if it could not rise that far)
+    L.left -= D
+    for (const r of L.rows) r.y -= X.slide[1]
+    for (const q of X.slots) {
+      q.x -= D
+      q.y -= X.slide[1]
+    }
+  }
+  // it dissolves nearest the rock first, from where it is then (the tail takes those first, and they are the ones nearest the hole)
+  const [ux, uy] = trackAt(X, DISSOLVE_AT), dist = X.slots.map((q) => Math.hypot(q.x - ux, q.y - uy)), d0 = Math.min(...dist), d1 = Math.max(...dist)
+  X.slots.forEach((q, i) => (q.gone = DISSOLVE_AT + (CLEAR_SPREAD * (dist[i] - d0)) / Math.max(1, d1 - d0)))
   // each line's box for the knockout (the kicker's runs down to the paragraph), and when it parts and closes again
   X.rows = L.rows.map((r, i) => ({ t: r.t, gone: Math.min(...X.slots.filter((q) => q.L === i).map((q) => q.gone)),
     x0: L.left - 0.5 * L.cw, x1: L.left + (r.str.length + 0.5) * L.cw, y0: r.y - L.lh / 2, y1: i + 1 < L.rows.length && r.kick ? L.rows[i + 1].y - L.lh / 2 : r.y + L.lh / 2 }))
   const fx = FRAY * X.cell[0], fy = FRAY * X.cell[1]
   X.bbox = [Math.min(...X.rows.map((r) => r.x0)) - fx, X.rows[0].y0 - fy, Math.max(...X.rows.map((r) => r.x1)) + fx, X.rows.at(-1).y1 + fy]
-
-  // the hole sinks while the camera is in, as far as keeps the written text above its light, and the rock ROCK_CLEAR
-  // from it (worked out with it unsunk)
-  let sink = 0
-  for (let s = WRITE_FROM; s <= CLEAR_AT + 0.02; s += 0.02) {
-    const c = cameraAt(X, T, s), hx = T.P.cx * c.kf + c.fox, hy = T.P.cy * c.kf + c.foy, hr = T.P.R * c.kf, f = Math.max(0.05, sunk(s))
-    for (const q of X.slots) if (q.at - SCRAMBLE <= s) sink = Math.max(sink, (q.y + 0.6 * L.fs + HOLE_CLEAR * H - (hy - holeTop((q.x - hx) / hr) * hr)) / f)
-    const P = pathAt(T, storyOf(s), 0), rx = P.x * c.k + c.ox, ry = P.y * c.k + c.oy, g = ROCK_CLEAR * hr + T.ball * T.rr * c.k
-    if (Math.abs(rx - hx) < g) sink = Math.max(sink, (ry + Math.sqrt(g * g - (rx - hx) ** 2) - hy) / f)
-  }
   X.sink = sink
 
   // the release: the camera then; the rock's way round the hole and in, and the camera following it, are worked out from
@@ -303,9 +364,9 @@ export function steerOf(X, T, s) {
     const sg = s - copy * STREAK, u = (sg - P.cs) / WHIP
     if (u <= 0) return -1
     // where it is on screen: waiting level with its letter, a few cells right of it, then sliding into it as it locks
-    const cap = smoother(u), w = smoother((sg - P.q.at + SLIDE) / SLIDE), sx = P.wx + (P.q.x - P.wx) * w, c = cameraAt(X, T, sg)
+    const cap = smoother(u), w = smoother((sg - P.q.at + SLIDE) / SLIDE), g = toGo(X, sg), sx = P.wx + (P.q.x - P.wx) * w + X.slide[0] * g, c = cameraAt(X, T, sg)
     o[0] += ((sx - c.ox) / c.k - o[0]) * cap // back into the scene, as the camera then saw it
-    o[1] += ((P.q.y - c.oy) / c.k - o[1]) * cap
+    o[1] += ((P.q.y + X.slide[1] * g - c.oy) / c.k - o[1]) * cap
     o[2] = cap
     o[3] = 1 - cap // upright as it waits
     o[4] = 1 - (1 - WAIT_SIZE) * cap - 0.6 * WAIT_SIZE * w // small as it waits, smaller as it lands
@@ -317,11 +378,13 @@ export function steerOf(X, T, s) {
 // 0..1, the chance a cell there is left out: KNOCKOUT under each line once it is being written, thinning to none over
 // FRAY of the hole's cells past it, and closing again as the line dissolves. null when nothing is (KNOCKOUT 0: never)
 export function knockOf(X, s) {
-  if (!X || KNOCKOUT <= 0 || s < WRITE_FROM - SCRAMBLE || s > CLEAR_AT + CLEAR_SPREAD + DISSOLVE) return null
+  if (!X || KNOCKOUT <= 0 || s < WRITE_FROM - SCRAMBLE || s > DISSOLVE_AT + CLEAR_SPREAD + DISSOLVE) return null
   const live = X.rows.map((r) => KNOCKOUT * smooth((s - r.t + SCRAMBLE) / LINE_SWEEP) * (1 - smooth((s - r.gone) / (0.5 * DISSOLVE))))
   if (!live.some((m) => m > 0)) return null
-  const [cw, ch] = X.cell, [bx0, by0, bx1, by1] = X.bbox
+  const [cw, ch] = X.cell, [bx0, by0, bx1, by1] = X.bbox, g = toGo(X, s), ox = X.slide[0] * g, oy = X.slide[1] * g
   return (x, y) => {
+    x -= ox // (the boxes are where the text ends up)
+    y -= oy
     if (x < bx0 || x > bx1 || y < by0 || y > by1) return 0
     let k = 0
     for (let i = 0; i < live.length; i++) {
@@ -349,15 +412,16 @@ function tailAt(X, T, s, cam) {
   }
   return pts
 }
-// Letter q's glyphs, r into its dissolve, with the tail where tail (tailAt) has it: each starts in the letter's place, is
+// Letter q's glyphs, r into its dissolve, with the tail where tail (tailAt) has it: each starts in the letter's place (ox, oy
+// from its own: it may still be on its way toward the middle, toGo), is
 // drawn into the tail where it passes nearest, and streams away down it, hot and blue as it joins, cooling and fading.
 // cb(x, y, glyph, rgb, alpha)
-function motes(X, q, r, tail, cb) {
+function motes(X, q, r, tail, ox, oy, cb) {
   const base = q.kick ? KICKER_RGB : TEXT_RGB, step = TAIL_STEP * X.H
   for (let m = 0; m < MOTES; m++) {
     const g = q.j * MOTES + m, rm = r - 0.08 * hash(g, 93) // a little apart
     if (rm <= 0 || rm >= 1) continue
-    const sx = q.x + (hash(g, 94) - 0.5) * 0.6 * X.cw, sy = q.y + (hash(g, 95) - 0.5) * 0.5 * X.lh
+    const sx = q.x + ox + (hash(g, 94) - 0.5) * 0.6 * X.cw, sy = q.y + oy + (hash(g, 95) - 0.5) * 0.5 * X.lh
     const off = (hash(g, 97) - 0.5) * 2 * IN_TAIL * X.rock // how far off the tail's middle it streams
     let near = -1, best = Infinity // where the tail passes nearest it, clear of the hole and by a way clear of it too (off it, as it will be), then on down the tail
     const [cx, cy, cr] = tail.hole, keep = PATH_KEEP * cr + Math.abs(off)
@@ -387,9 +451,9 @@ function motes(X, q, r, tail, cb) {
 // every glyph the dissolving text is in at scroll s that is drawn: [[x, y], ...] (css px), for a check that none goes near the hole
 export function motesAt(X, T, s, cam) {
   const out = []
-  if (X.reduced || s <= CLEAR_AT) return out
-  const tail = tailAt(X, T, s, cam)
-  for (const q of X.slots) motes(X, q, (s - q.gone) / DISSOLVE, tail, (px, py, g, c, a) => a >= 0.02 && out.push([px, py]))
+  if (X.reduced || s <= DISSOLVE_AT) return out
+  const tail = tailAt(X, T, s, cam), g = toGo(X, s)
+  for (const q of X.slots) motes(X, q, (s - q.gone) / DISSOLVE, tail, X.slide[0] * g, X.slide[1] * g, (px, py, gl, c, a) => a >= 0.02 && out.push([px, py]))
   return out
 }
 
@@ -397,7 +461,7 @@ export function motesAt(X, T, s, cam) {
 // Over everything: the text, as far as the rock has written it at scroll s, and as it dissolves into the tail. T: the
 // asteroid's layout; cam: the camera now (cameraAt)
 export function drawAbout(ctx, X, T, s, cam) {
-  if (s < WRITE_FROM - SCRAMBLE || s > CLEAR_AT + CLEAR_SPREAD + 1.1 * DISSOLVE) return
+  if (s < WRITE_FROM - SCRAMBLE || s > DISSOLVE_AT + CLEAR_SPREAD + 1.1 * DISSOLVE) return
   const { x, dpr, W } = X
   x.setTransform(1, 0, 0, 1, 0, 0)
   x.globalCompositeOperation = 'source-over'
@@ -413,7 +477,7 @@ export function drawAbout(ctx, X, T, s, cam) {
     x.fillStyle = `rgba(${c},${Math.min(1, a).toFixed(3)})`
     x.fillText(ch, px, py)
   }
-  const tail = !X.reduced && s > CLEAR_AT ? tailAt(X, T, s, cam) : null, bits = []
+  const tail = !X.reduced && s > DISSOLVE_AT ? tailAt(X, T, s, cam) : null, bits = [], g = toGo(X, s), ox = X.slide[0] * g, oy = X.slide[1] * g
   for (const q of X.slots) {
     const base = q.kick ? KICKER_RGB : TEXT_RGB, a = s - q.at, r = (s - q.gone) / DISSOLVE
     if (X.reduced) { // it fades in where it lands, line by line, and out where it was
@@ -423,17 +487,17 @@ export function drawAbout(ctx, X, T, s, cam) {
     if (a < -SCRAMBLE || r >= 1.1) continue // (its glyphs leave up to 0.08 apart)
     if (a < 0) { // scrambling in its place, dim: a few glyphs, then it locks
       const k = Math.min(SWAPS - 1, Math.floor(((a + SCRAMBLE) / SCRAMBLE) * SWAPS))
-      put(SCRAMBLE_SET[Math.floor(hash(q.j * 7 + k, 91) * SCRAMBLE_SET.length)], q.x, q.y, base, SCRAMBLE_ALPHA * smooth((a + SCRAMBLE) / (0.3 * SCRAMBLE)))
+      put(SCRAMBLE_SET[Math.floor(hash(q.j * 7 + k, 91) * SCRAMBLE_SET.length)], q.x + ox, q.y + oy, base, SCRAMBLE_ALPHA * smooth((a + SCRAMBLE) / (0.3 * SCRAMBLE)))
       continue
     }
     const c = mix(base, HOT_RGB, 1 - smooth(a / COOL)) // locked: white hot, cooling to its colour
     if (r <= 0) {
-      put(q.ch, q.x, q.y, c, 1)
+      put(q.ch, q.x + ox, q.y + oy, c, 1)
       continue
     }
-    if (r < BREAK) put(q.ch, q.x, q.y, c, 1 - smooth(r / BREAK)) // the type breaking up
-    motes(X, q, r, tail, (px, py, g, rgb, al) => bits.push(px, py, g, rgb, al)) // into the tail's glyphs
-    motes(X, q, r - SMEAR / DISSOLVE, tail, (px, py, g, rgb, al) => bits.push(px, py, g, rgb, 0.3 * al)) // a faint copy behind each
+    if (r < BREAK) put(q.ch, q.x + ox, q.y + oy, c, 1 - smooth(r / BREAK)) // the type breaking up
+    motes(X, q, r, tail, ox, oy, (px, py, gl, rgb, al) => bits.push(px, py, gl, rgb, al)) // into the tail's glyphs
+    motes(X, q, r - SMEAR / DISSOLVE, tail, ox, oy, (px, py, gl, rgb, al) => bits.push(px, py, gl, rgb, 0.3 * al)) // a faint copy behind each
   }
   if (bits.length) {
     x.font = X.tailFont
