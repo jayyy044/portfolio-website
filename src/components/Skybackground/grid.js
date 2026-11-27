@@ -15,8 +15,9 @@
 // The sheet's colour is its depth: ice blue on the flat, white hot deep in a well. All glyphs, drawn behind the hole's
 // gas; the sky turns with the camera (lensing.js SKY_VIEW). A pure function of the scroll but for the rocks' slow tumble on
 // the clock (when the scroll stops, all else holds still), so scrolling back rewinds it. Reduced motion: the same camera (it
-// moves only with the scroll), but no ripples, no falls and no tumble: the sheet, the masses and the text fade in.
-import { smooth, hole, INTRO_END, POOLS } from './blackhole'
+// moves only with the scroll), but no ripples, no falls and no tumble: the sheet, the masses and the text fade in; and on
+// the way out no infall, spiral or streaks: they fade out where they are.
+import { smooth, hole, INTRO_END, POOLS, HOLE_VIEW } from './blackhole'
 import { hash, bigger } from './name'
 import { put, render, canvas, glowsOf, stroke, DUST as MOTES } from './asteroid'
 import { ROOM_END, farOf } from './about'
@@ -35,8 +36,63 @@ const LAND_LEAD = 0.1 // landing this long before the camera arrives
 const TYPE = 0.3 // its role types over this, from when it lands
 const LEAVE = 0.25 // as the camera moves on, the role's text and its stem fade out over this
 const GROW = 0.2, PAST_ROCK = 0.5 // and once they have, its rock (held small while its text showed, if that was long) settles over this at this much of its full size
-const END_HOLD = 0.6 // after the last role arrives the camera holds this long, and the page's scroll room ends
-export const ROOM = PULL + OVER_HOLD + ROLES.length * GLIDE + (ROLES.length - 1) * DWELL + END_HOLD // screens of scroll this section adds
+const END_HOLD = 0.6 // after the last role arrives the camera holds this long, then the sheet drains away (the way out)
+// ---------- the way out: the sheet drains into the hole, spiralling in, the nearest first, its rocks with it, and leaves
+// the hole alone in the sky where the overview had it (OVER_X, OVER_Y, OVER_R), the camera tipped to EXIT_PITCH ----------
+const EXIT_ROOM = 3.2 // screens of scroll it takes
+const EXIT_HOLD = 0.3 // then the hole holds alone this long, and the page's scroll room ends
+const EXIT_PITCH = 0.9 // how far the camera looks down at the end, radians (the overview's: PITCH)
+const EXIT_SIZE = [0.6, 0.55] // how big the hole is at the end, against its resting size (blackhole.js rest()), [wide, tall]
+const EXIT_TEXT = 0.07 // the last role's text, the labels and the stems go first, over this much of the way out
+// the camera's way there: it tips down over the well to watch the whirlpool, then levels out to the end. Where it is at each
+// stop (fractions of the way out; between, it eases through them, never stopping): how far round it has turned (0 = as at
+// the last role, 1 = as at the end), how far it looks down (radians: no further than about 1.2, past which the whirlpool
+// reads round, from straight above, while the hole is drawn from the side), how big the hole is as it sees it (against
+// its resting size; it is drawn no smaller than HOLE_MIN: tall screens come nearer, so the whirlpool reaches their top and
+// bottom) and where it is on screen (screen widths, heights); each [wide, tall]
+const WAY = [{ e: 0.25, turn: 0.5, pitch: 1.2, R: [0.22, 0.42], x: [0.5, 0.5], y: [0.45, 0.45] }, { e: 0.75, turn: 0.85, pitch: 1.2, R: [0.34, 0.55], x: [0.5, 0.5], y: [0.44, 0.44] }]
+// and the hole tips toward us as it goes, its disk seen from this much further above (added to its tilt at rest, blackhole.js
+// REST_INC: the shape of its disk, height over width), all of it by HOLE_TILT_BY of the way out, and stays so at the end
+const HOLE_TILT = 0.14, HOLE_TILT_BY = 0.35
+// the drain: over DRAIN_FROM..DRAIN_TO of the way out, easing in and out (DRAIN_EASE: 1 = even, higher = slower at either
+// end, quicker between: so its last ring winds in slowly); each point of the sheet falls in in its own time, (r / DRAIN_R)^1.5
+// of the drain (the nearest first: the sheet reaches DRAIN_R shadow radii out, its outer DRAIN_EDGE soft), from rest, faster
+// and faster, turning about the hole as it goes, the faster the nearer (DRAIN_SPIN turns for each e-fold of its fall)
+const DRAIN_FROM = 0.06, DRAIN_TO = 0.86, DRAIN_EASE = 2.2
+const DRAIN_R = 50, DRAIN_EDGE = 1, DRAIN_SPIN = 0.16 // (DRAIN_R: at least; further if a rock lies further out, so every rock goes in)
+// over its last DRAIN_THIN of the drain it thins out, winding in: fewer and fewer of its lines (all but those DRAIN_THIN_RANK
+// ranks higher go), and fainter (DRAIN_THIN_FADE of it), till its last ring goes in
+const DRAIN_THIN = 0.45, DRAIN_THIN_RANK = 1.5, DRAIN_THIN_FADE = 0.4
+const THROAT = 4 // within this many of the hole's shadow radii (as drawn) what falls leaves the well's bottom for the hole's centre
+// as it falls it heats: from the sheet's ice blue, through white hot (BURN_WHITE shadow radii out, as drawn), to the disk's own orange
+// in the throat (BURN_ORANGE), and brightens (BURN_LUM times, at most)
+const BURN_WHITE = 5, BURN_ORANGE = 1.8, BURN_LUM = 1.7
+// what moves fast on screen draws as a streak along its way: a glyph every STREAK cells back along where it was STREAK_E
+// of the way out before (so longer the faster it goes), at most STREAK_N of them
+const STREAK = 1.4, STREAK_E = 0.025, STREAK_N = 5
+const STREAK_TURN = 2 // and a glyph that has come further than this many letter cells over STREAK_E turns to the way it goes (- / | and back slash)
+// the streams pour in as bands: as they fall they widen to DRAIN_THICK cells either side, each cell out DRAIN_EDGE_LUM as
+// bright as the one inside it; brighter by DRAIN_GLOW; and in the throat, where they burn, in heavier glyphs (HEAVY: the
+// brighter, the denser)
+const DRAIN_THICK = 1, DRAIN_EDGE_LUM = 0.55, DRAIN_GLOW = 1.3, HEAVY = ':=+*#'
+// less even than a lattice: each line its own brightness (VARY: 0 = all alike), and the sheet in brighter and fainter swathes (SWATHE)
+const VARY = 0.6, SWATHE = 0.55
+// and sparser: as it drains, crowded lines thin out THIN times sooner, and the dots between lines fade (SPARSE of them, but
+// for the nearest)
+const THIN = 2.5, SPARSE = 0.95
+const FILL = 0.8 // and its fog and sides reach this much further, so it fills the screen
+const RANK = 3 // and where it has wound in, only lines of this rank show (their place in the lattice halves evenly this many times: 2, every major line; 3, every other one)
+// the rocks go with it, stretching out as they go into streaks of glyphs (ROCK_TAIL of the way out long, SPAG: what is left
+// of their bodies), each with a flare where it meets the hole's light (FLARE_E of the way out, FLARE_N glyphs, FLARE_REACH
+// letter cells out, FLARE_LUM bright)
+const ROCK_TAIL = 0.06, SPAG = 0.3, FLARE_E = 0.05, FLARE_N = 26, FLARE_REACH = 7, FLARE_LUM = 1.5
+// a rock going in fades as it falls, from ROCK_GO[0] of its fall to ROCK_GO[1]; and before it comes over the hole's light (gone
+// ROCK_NEAR of the hole's radii from its centre, in over ROCK_NEAR_W more) or behind it (all the way behind ROCK_BEHIND of
+// the hole's radii, as drawn, further than the hole)
+const ROCK_GO = [0.6, 0.92], ROCK_NEAR = 1.4, ROCK_NEAR_W = 0.9, ROCK_BEHIND = 1
+// the last ring goes into the throat by GONE_AT of the way out (reduced motion: all of it has faded where it is by then)
+const GONE_AT = 0.76
+export const ROOM = PULL + OVER_HOLD + ROLES.length * GLIDE + (ROLES.length - 1) * DWELL + END_HOLD + EXIT_ROOM + EXIT_HOLD // screens of scroll this section adds
 // ---------- the camera (a real perspective one: the hole and the sky are placed where it sees them) ----------
 const PITCH = 0.45 // how far it looks down onto the sheet, radians (0 = straight across it); at each role it tips as far as puts the hole at HOLE_READ_Y, within PITCH_MIN..PITCH_MAX
 const PITCH_MIN = 0.3, PITCH_MAX = 0.75
@@ -169,6 +225,8 @@ const holeTop = (dx) => { const a = Math.abs(dx); return a < 2.6 ? 1.95 * Math.s
 // (below its centre, HOLE_BELOW of that: its lower ring is thinner than the arch over it)
 const HOLE_BELOW = 0.6 // measured at the end hold (1440x900, 1366x768, 390x844): its light reaches about 1.2 radii under its middle, 0.7-0.9 a radius to either side, 0.25-0.4 past that
 const lightGap = (h, x, y) => { const ax = Math.abs(x - h.cx) / h.R; return Math.max(ax - 5.1, Math.abs(y - h.cy) / h.R - (y > h.cy ? HOLE_BELOW : 1) * holeTop(ax)) }
+// the same, roughly but smoothly (an ellipse through its disk's tips and over its arch): how far out of it, as a fraction of it
+const lightOut = (h, x, y) => Math.hypot((x - h.cx) / (5.1 * h.R), (y - h.cy) / ((y > h.cy ? HOLE_BELOW : 1) * 2.1 * h.R)) - 1
 const NZ = valueNoise(9137) // the fire's flames (asteroid.js's)
 const level = (k) => (k === 0 ? 30 : 31 - Math.clz32(k & -k)) // how many times k halves evenly: a line's rank in the lattice
 
@@ -190,9 +248,11 @@ export function create(W, H, dpr, B, art, S, reduced) {
 
   // the beats: when the camera arrives at each role, and when its mass lands
   X.at = ROLES.map((r, i) => PULL + OVER_HOLD + GLIDE + i * (GLIDE + DWELL))
+  X.ex0 = X.at.at(-1) + END_HOLD // the way out starts
   // the timeline runs off to the right of the hole (+x); the camera turns round the hole by Y0 (tall screens: half a turn,
   // so it runs off to the left, the hole on the right)
   X.mass = ROLES.map((r, i) => ({ x: MASS_X0 + i * lerp(MASS_DX, MASS_DX_TALL, tw), z: 0, land: X.at[i] - LAND_LEAD, K: rockOf(i) }))
+  X.reach = Math.max(DRAIN_R, ...X.mass.map((m) => Math.hypot(m.x, m.z))) // (the way out: how far out the sheet drains from)
 
   // where each mass comes to rest on the sheet (in the hole's well, in its own dimple)
   // (its own dent, and those of the rocks that landed before it, which reach it: they are wide)
@@ -316,13 +376,17 @@ export function create(W, H, dpr, B, art, S, reduced) {
   })
   X.mass.forEach((m, i) => {
     key(X.at[i], m.x, X.rest[i], m.z, m.yaw, rx, ry, readR, m.pitch)
-    key(X.at[i] + DWELL, m.x, X.rest[i], m.z, m.yaw, rx, ry, readR, m.pitch)
+    key(i < X.mass.length - 1 ? X.at[i] + DWELL : X.ex0, m.x, X.rest[i], m.z, m.yaw, rx, ry, readR, m.pitch)
     // it falls from above the top of the screen (at its reading place); its stem reaches up to its role's text there, its
     // glyphs about a letter cell apart
     m.up = (dy) => (dy * d) / (X.f * Math.cos(m.pitch) + dy * Math.sin(m.pitch)) // how high above it shows dy px higher
     m.dropH = m.up(ry * H + 0.1 * H)
     m.step = CH / (readR * Math.cos(m.pitch))
   })
+  // the way out: from the last role (where it held) the camera goes its way (WAY) to the hole where the overview had it,
+  // EXIT_SIZE of its resting size, tipped to EXIT_PITCH, and holds there
+  key(X.ex0 + EXIT_ROOM, 0, HOLE_Y, 0, Y0, OVER_X, OVER_Y, lerp(EXIT_SIZE[0], EXIT_SIZE[1], tw) * B.R, EXIT_PITCH)
+  X.way = wayOf(X, X.keys.at(-2), X.keys.at(-1), tw)
   const rTop = (SIT + Math.max(1, ...X.mass.map((m) => m.K.ext)) + 0.5 * ROCK_CLEAR) * Math.min(ROCK_MAX * CW, Math.max(X.rmin, ROCK_R * readR)) // the top of a rock there, and room above it
   // each stem reaches up to its role's text, CARD_LIFT lines above its rock, or as far above that as keeps the text clear
   // of the hole's light (as big as it is drawn there: a long role, tall screens), seen from the camera's place at that role
@@ -347,13 +411,46 @@ function camOf(X, tx, ty, tz, yaw, pitch, px, py, d) {
   const fx = sy * cp, fy = -sp, fz = cy * cp // forward
   return { cx: tx - fx * d, cy: ty - fy * d, cz: tz - fz * d, fx, fy, fz, rx: cy, rz: -sy, ux: sy * sp, uy: cp, uz: cy * sp, f: X.f, px, py, d, sp, yaw, pitch }
 }
-// the camera at u (screens of scroll after ROOM_END): held at each pose, glided between them
+// the camera at u (screens of scroll after ROOM_END): held at each pose, glided between them; on the way out, on its way
 function poseAt(X, u) {
+  if (u > X.ex0 && u < X.ex0 + EXIT_ROOM) return wayAt(X, (u - X.ex0) / EXIT_ROOM)
   const K = X.keys
   let i = 1
   while (i < K.length - 1 && u > K[i].u) i++
   const a = K[i - 1], b = K[i], e = smoother((u - a.u) / (b.u - a.u)), m = (k) => lerp(a[k], b[k], e)
   return camOf(X, m('tx'), m('ty'), m('tz'), m('yaw'), m('pitch'), m('px') * X.W, m('py') * X.H, Math.exp(m('ld')))
+}
+// The way out, worked out once: the camera put as the hole sees it (its turn and tip, how far the hole is, where it is on
+// screen, the screen's centre of view, how far the fog reaches) at the last role (a), at each stop of its way (WAY) and at
+// the end (b); and the slope it passes through each with (wayAt: a smooth curve through them, starting and ending at
+// rest, never overshooting between them)
+function wayOf(X, a, b, tw) {
+  const { W, H } = X, o = {}, mix = (v) => lerp(v[0], v[1], tw)
+  const at = (k) => { proj(camOf(X, k.tx, k.ty, k.tz, k.yaw, k.pitch, k.px * W, k.py * H, Math.exp(k.ld)), 0, HOLE_Y, 0, o); return { e: 0, yaw: k.yaw, pitch: k.pitch, lz: Math.log(o.z), hx: o.x / W, hy: o.y / H, px: k.px, py: k.py, ld: k.ld } }
+  const A = at(a), B = { ...at(b), e: 1 }
+  const stops = [A, ...WAY.map((q) => { const lz = Math.log(X.f / (mix(q.R) * X.B.R)); return { e: q.e, yaw: lerp(A.yaw, B.yaw, q.turn), pitch: q.pitch, lz, hx: mix(q.x), hy: mix(q.y), px: mix(q.x), py: mix(q.y), ld: lz } }), B]
+  for (const k of Object.keys(A)) {
+    if (k === 'e') continue
+    const sl = stops.slice(1).map((q, i) => (q[k] - stops[i][k]) / (q.e - stops[i].e)) // each stretch's slope
+    stops.forEach((q, i) => (q['m' + k] = i === 0 || i === stops.length - 1 || sl[i - 1] * sl[i] <= 0 ? 0 : (2 * sl[i - 1] * sl[i]) / (sl[i - 1] + sl[i])))
+  }
+  return stops
+}
+// the camera e (0..1) of the way out: each of its settings eased through the stops (wayOf), then put so the hole is where
+// they say
+function wayAt(X, e) {
+  const st = X.way
+  let i = 1
+  while (i < st.length - 1 && e > st[i].e) i++
+  const a = st[i - 1], b = st[i], h = b.e - a.e, t = (e - a.e) / h, t2 = t * t, t3 = t2 * t
+  const v = (k) => (2 * t3 - 3 * t2 + 1) * a[k] + (t3 - 2 * t2 + t) * h * a['m' + k] + (3 * t2 - 2 * t3) * b[k] + (t3 - t2) * h * b['m' + k]
+  const z = Math.exp(v('lz')), px = v('px') * X.W, py = v('py') * X.H, C = camOf(X, 0, HOLE_Y, 0, v('yaw'), v('pitch'), px, py, z)
+  const ax = ((v('hx') * X.W - px) * z) / X.f, ay = ((py - v('hy') * X.H) * z) / X.f // the hole off the centre of view, across and up, in the scene's units
+  C.cx -= C.rx * ax + C.ux * ay
+  C.cy -= C.uy * ay
+  C.cz -= C.rz * ax + C.uz * ay
+  C.d = Math.exp(v('ld'))
+  return C
 }
 // a point of the scene, x across, y up, z away (in the hole's shadow radii), onto the screen: o.x, o.y px, o.z its depth
 function proj(C, x, y, z, o) {
@@ -371,6 +468,7 @@ function proj(C, x, y, z, o) {
 export function camera(X, s, cam) {
   if (!X || s <= ROOM_END) {
     SKY_VIEW.on = false
+    HOLE_VIEW.inc = 0
     return cam
   }
   const K = X.keys[0], id = cam.kf + ' ' + cam.fox + ' ' + cam.foy
@@ -389,6 +487,7 @@ export function camera(X, s, cam) {
   SKY_VIEW.hR = X.skyR
   SKY_VIEW.yaw = C.yaw - X.Y0 // (the sky as the story left it at the start, whichever way the camera came round)
   SKY_VIEW.pitch = C.pitch - PITCH
+  HOLE_VIEW.inc = HOLE_TILT * smoother((s - ROOM_END - X.ex0) / (HOLE_TILT_BY * EXIT_ROOM)) // (the hole tips toward us on the way out: blackhole.js hole())
   return { ...cam, kf, fox: o.x - (X.W / 2) * kf, foy: o.y - X.B.cy * kf }
 }
 
@@ -440,12 +539,15 @@ function knockAt(F, x, y, strong) {
   return k
 }
 
-// one glyph of the sheet, z deep: in the layer behind the rocks, or (where it is nearer than a rock) the one over them
+// one glyph of the sheet, z deep: in the layer behind the rocks, or (where it is nearer than a rock) the one over them; F.burn
+// of it in the hole's own colours (at F.hot), and then always behind (the hole hides it)
 function mark(X, F, ch, x, y, lum, z) {
   if (lum < 0.02 || x < -20 || x > X.W + 20 || y < -20 || y > X.H + 20) return
   if (F.nb) lum *= 1 - knockAt(F, x, y)
   if (lum < 0.02) return
-  put(X.T, ch, X.snap(x), X.snap(y), F.heat, lum, inFront(F, x, y, z) ? 0 : 1)
+  const w = F.burn, back = w > 0 || !inFront(F, x, y, z) ? 1 : 0
+  if (w < 1) put(X.T, ch, X.snap(x), X.snap(y), F.heat, lum * (1 - w), back)
+  if (w > 0) put(X.T, ch, X.snap(x), X.snap(y), F.hot, lum * w, back, 1)
 }
 // whether something on the sheet at (x, y) on screen, z deep, is nearer than a rock's surface there (the near rim of its
 // dent, crossing in front of it); each rock taken as a ball of its radius
@@ -462,9 +564,10 @@ function inFront(F, x, y, z) {
 
 // The lattice: every crossing in view projected once, then each line drawn between them, one glyph every STEP cells
 // along it (more of them where it comes nearer, fading in by halves, so a mark stays put on the sheet), and a + at each
-// crossing. Lines that crowd together on screen thin out by halves too, far away
+// crossing. Lines that crowd together on screen thin out by halves too, far away. As it drains (the way out), all of it
+// that falls into view is drawn, from wherever it was, as lookAt has it, and what moves fast leaves a streak
 function drawSheet(X, F, C) {
-  const { W, H } = X, { CW, CH } = X.A, L = LATTICE, d = C.d, far = FOG[1] * d
+  const { W, H } = X, { CW, CH } = X.A, L = LATTICE, d = C.d, fl = d * (1 + FILL * F.mix), far = FOG[1] * fl, dr = F.dr // (fl: how far its fog and sides reach; draining, further, so it fills the screen)
   // the patch of sheet in view: where rays through the screen's corners (and straight ahead) meet it, no further than the
   // fog reaches; a little more for the wells, which pull the sheet down into view
   const mg = 0.1 * Math.max(W, H)
@@ -478,22 +581,39 @@ function drawSheet(X, F, C) {
     x0 = Math.min(x0, px); x1 = Math.max(x1, px); z0 = Math.min(z0, pz); z1 = Math.max(z1, pz)
   }
   x0 = Math.min(x0, C.cx); x1 = Math.max(x1, C.cx); z0 = Math.min(z0, C.cz); z1 = Math.max(z1, C.cz)
+  const vx0 = x0 - 2, vx1 = x1 + 2, vz0 = z0 - 2, vz1 = z1 + 2 // (what is in view, with a little to spare)
+  let rg = 0 // draining: what was within rg of the hole has gone in
+  if (dr > 0) { // and the patch grows to take in what falls into view: from further out, and (turning) from round the hole
+    const R = Math.max(Math.hypot(x0, z0), Math.hypot(x0, z1), Math.hypot(x1, z0), Math.hypot(x1, z1))
+    let lo = R, hi = Math.max(R, F.reach)
+    for (let k = 0; k < 24; k++) { const m = (lo + hi) / 2; if (warp(W1, dr, m, 0, F.reach).r < R) lo = m; else hi = m }
+    const g = hi - R + 0.12 * hi, rt = Math.min(F.reach, F.reach * (dr / 0.25) ** (2 / 3)), e = F.reach + L
+    x0 = Math.max(-e, Math.min(x0 - g, -rt)); x1 = Math.min(e, Math.max(x1 + g, rt)); z0 = Math.max(-e, Math.min(z0 - g, -rt)); z1 = Math.min(e, Math.max(z1 + g, rt))
+    rg = F.reach * (dr / 0.999) ** (2 / 3)
+  }
   const kx0 = Math.floor(x0 / L) - 2, kx1 = Math.ceil(x1 / L) + 2, kz0 = Math.floor(z0 / L) - 2, kz1 = Math.ceil(z1 / L) + 2
   const nx = kx1 - kx0 + 1, nz = kz1 - kz0 + 1, n = nx * nz
-  if (!X.P || X.P.n < n) X.P = { n, x: new Float32Array(n), y: new Float32Array(n), z: new Float32Array(n), a: new Float32Array(n), h: new Float32Array(n) }
-  const P = X.P, o = X.o, f0 = FOG[0] * d, fw = (FOG[1] - FOG[0]) * d, tx = C.cx + C.fx * d, tz = C.cz + C.fz * d, sr = 1 / (SPOT * d) ** 2
+  if (!X.P || X.P.n < n) X.P = { n, x: new Float32Array(n), y: new Float32Array(n), z: new Float32Array(n), a: new Float32Array(n), h: new Float32Array(n), q: new Float32Array(n) }
+  const P = X.P, o = X.o, f0 = FOG[0] * fl, fw = (FOG[1] - FOG[0]) * fl, tx = C.cx + C.fx * d, tz = C.cz + C.fz * d, sr = 1 / (SPOT * fl) ** 2
   const spot = (x, z) => 1 / (1 + ((x - tx) ** 2 + (z - tz) ** 2) * sr)
+  let gx = 0, gy = 0, gz = 0 // (where what has gone in went: the hole)
+  if (rg > 0) { proj(C, 0, HOLE_Y, 0, o); gx = o.x; gy = o.y; gz = o.z }
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const id = j * nx + i, x = (kx0 + i) * L, z = (kz0 + j) * L
-    field(F, x, z)
-    proj(C, x, F.y, z, o)
+    if (x * x + z * z < rg * rg) { P.x[id] = gx; P.y[id] = gy; P.z[id] = gz; P.a[id] = 0; P.h[id] = 0; P.q[id] = 1; continue }
+    if (dr > 0 && (warp(W1, dr, x, z, F.reach).x < vx0 || W1.x > vx1 || W1.z < vz0 || W1.z > vz1)) { // fallen to out of view: roughly where (for its lines into view)
+      proj(C, W1.x, well(W1.r * W1.r), W1.z, o); P.x[id] = o.x; P.y[id] = o.y; P.z[id] = o.z; P.a[id] = 0; P.h[id] = 0; P.q[id] = W1.q; continue
+    }
+    sheetAt(F, x, z, dr > 0 && W1)
+    proj(C, F.x, F.y, F.z, o)
     P.x[id] = o.x
     P.y[id] = o.y
     P.z[id] = o.z
-    P.a[id] = o.z > 0.05 * d ? F.v * (1 - smooth((o.z - f0) / fw)) * (1 + F.g) * spot(x, z) : 0
+    P.a[id] = o.z > 0.05 * d ? F.v * (1 - smooth((o.z - f0) / fw)) * (1 + F.g) * spot(F.x, F.z) * (1 - DRAIN_THIN_FADE * F.fin) : 0
     P.h[id] = F.d + 0.25 * F.g
+    P.q[id] = F.q
   }
-  const fade = (k, sp) => smooth((sp * 2 ** Math.min(level(k), 10)) / LOD_PX - 1) // a line's lod
+  const lod = LOD_PX * (1 + THIN * F.mix), rank = RANK * F.mix, fade = (k, sp, q) => smooth((sp * 2 ** Math.min(level(k), 10)) / lod - 1) * (rank ? smooth(level(k) - rank * smooth(q / 0.4) - DRAIN_THIN_RANK * F.fin + 1) : 1) // a line's lod (draining, crowded lines thin out sooner, and where it has wound in, the lesser ones go)
   // how far apart on screen the line through id (on to id + a) and the next one over (id + b) are, square to it
   const gapOf = (id, a, b) => {
     const ex = P.x[id + a] - P.x[id], ey = P.y[id + a] - P.y[id], vx = P.x[id + b] - P.x[id], vy = P.y[id + b] - P.y[id]
@@ -502,8 +622,8 @@ function drawSheet(X, F, C) {
   // how much of the square lattice shows at (x, z): none deep in the well, where the rings and spokes are, all past POLAR_R
   const sq = (x, z) => smooth((Math.hypot(x, z) - 0.6 * POLAR_R) / (0.4 * POLAR_R))
   // glyphs along the sheet from (xa, za) to (xb, zb), at (x0, y0) and (x1, y1) on screen, a this strong; each glyph's world
-  // point lerped and projected afresh. polar: a ring or spoke (else the square lattice)
-  const run = (a, xa, za, xb, zb, x0, y0, x1, y1, polar) => {
+  // point lerped and projected afresh. polar: a ring or spoke (else the square lattice); k: which line (lookAt)
+  const run = (a, xa, za, xb, zb, x0, y0, x1, y1, polar, k) => {
     const sx = x1 - x0, sy = y1 - y0, len = Math.hypot(sx, sy)
     if (len < 1) return
     if (Math.max(x0, x1) < -20 || Math.min(x0, x1) > W + 20 || Math.max(y0, y1) < -20 || Math.min(y0, y1) > H + 20) return
@@ -511,65 +631,108 @@ function drawSheet(X, F, C) {
     if (m < 1) return
     const N = 2 ** Math.min(6, Math.floor(Math.log2(m))), fine = smooth(m / N - 1) // N glyphs at full, the next N fading in between them
     const ch = stroke(sx, sy), lum = MAJOR_LUM
-    for (let k = 1; k < 2 * N; k++) {
-      const odd = k & 1
+    for (let k2 = 1; k2 < 2 * N; k2++) {
+      const odd = k2 & 1
       if (odd && fine < 0.02) continue
-      const t = k / (2 * N), x = lerp(xa, xb, t), z = lerp(za, zb, t), b = polar ? 1 - sq(x, z) : sq(x, z)
+      const t = k2 / (2 * N), x = lerp(xa, xb, t), z = lerp(za, zb, t), b = polar ? 1 - sq(x, z) : sq(x, z)
       if (b < 0.01) continue
-      field(F, x, z)
-      proj(C, x, F.y, z, o)
+      sheetAt(F, x, z)
+      proj(C, F.x, F.y, F.z, o)
       if (o.z <= 0.05 * d) continue
       const dp = Math.min(1, F.d + 0.25 * F.g)
       F.heat = HEAT_FLAT + (HEAT_DEEP - HEAT_FLAT) * dp
-      const al = F.v * (1 - smooth((o.z - f0) / fw)) * (1 + F.g) * (1 + DEEP_LUM * dp * dp) * spot(x, z)
-      mark(X, F, ch, o.x, o.y, lum * a * al * b * (odd ? fine : 1), o.z)
+      const al = F.v * (1 - smooth((o.z - f0) / fw)) * (1 + F.g) * (1 + DEEP_LUM * dp * dp) * spot(F.x, F.z)
+      let c = ch, l = lum * a * al * b * (odd ? fine : 1)
+      if (F.e > 0) {
+        l *= lookAt(X, F, C, x, z, o.x, o.y, k)
+        if (F.mv) c = F.mv
+        band(X, F, c, o.x, o.y, l, o.z, F.mv ? F.vx : sx, F.mv ? F.vy : sy)
+      } else mark(X, F, c, o.x, o.y, l, o.z)
     }
   }
   // a line of the square lattice from crossing p to q (ids), its rank fade a
-  const line = (p, q, a, xa, za, xb, zb) => {
-    if (P.a[p] > 0.01 || P.a[q] > 0.01) run(a, xa, za, xb, zb, P.x[p], P.y[p], P.x[q], P.y[q], false)
+  const line = (p, q, a, xa, za, xb, zb, k) => {
+    if (P.a[p] > 0.01 || P.a[q] > 0.01) run(a, xa, za, xb, zb, P.x[p], P.y[p], P.x[q], P.y[q], false, k)
   }
   // a stretch of a ring or spoke, a this bright
-  const seg = (a, xa, za, xb, zb) => {
-    field(F, xa, za)
-    proj(C, xa, F.y, za, o)
+  const seg = (a, xa, za, xb, zb, k) => {
+    sheetAt(F, xa, za)
+    proj(C, F.x, F.y, F.z, o)
     const x0 = o.x, y0 = o.y, z0 = o.z
-    field(F, xb, zb)
-    proj(C, xb, F.y, zb, o)
-    if (z0 > 0.05 * d && o.z > 0.05 * d) run(a, xa, za, xb, zb, x0, y0, o.x, o.y, true)
+    sheetAt(F, xb, zb)
+    proj(C, F.x, F.y, F.z, o)
+    if (z0 > 0.05 * d && o.z > 0.05 * d) run(a, xa, za, xb, zb, x0, y0, o.x, o.y, true, k)
+  }
+  // a mark at a crossing, l bright (draining: as lookAt has it, and a streak behind it where it moves fast)
+  const dot = (ch, x, z, sx, sy, sz, l, k) => {
+    const h0 = F.heat
+    if (F.e > 0) {
+      if (ch === MINOR) l *= 1 - SPARSE * F.mix * smooth((sz - 0.4 * d) / (0.8 * d)) // (the nearest keep theirs)
+      sheetAt(F, x, z)
+      l *= lookAt(X, F, C, x, z, sx, sy, k)
+      if (F.mv) ch = F.mv
+    }
+    if (F.mv) band(X, F, ch, sx, sy, l, sz, F.vx, F.vy)
+    else mark(X, F, ch, sx, sy, l, sz)
+    if (ch !== MINOR && F.sp > 2.5 * STREAK * CW) streak(X, F, C, x, z, sx, sy, l, h0)
   }
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const id = j * nx + i, kx = kx0 + i, kz = kz0 + j, x = kx * L, z = kz * L
+    if (P.a[id] <= 0.01 && (i + 1 >= nx || P.a[id + 1] <= 0.01) && (j + 1 >= nz || P.a[id + nx] <= 0.01)) continue // (nothing of it shows: no line from it, no mark at it)
     // across (x): its lod by how far the next line back is on screen; and away (z): by how far the next one across is
-    const ax = fade(kz, gapOf(id, i + 1 < nx ? 1 : -1, j + 1 < nz ? nx : -nx)), az = fade(kx, gapOf(id, j + 1 < nz ? nx : -nx, i + 1 < nx ? 1 : -1))
+    const ax = fade(kz, gapOf(id, i + 1 < nx ? 1 : -1, j + 1 < nz ? nx : -nx), P.q[id]), az = fade(kx, gapOf(id, j + 1 < nz ? nx : -nx, i + 1 < nx ? 1 : -1), P.q[id])
     const mx = kx % MAJOR === 0, mz = kz % MAJOR === 0
-    if (mz && i + 1 < nx && ax > 0.01) line(id, id + 1, ax * (kz === 0 ? AXIS : 1), x, z, x + L, z)
-    if (mx && j + 1 < nz && az > 0.01) line(id, id + nx, az, x, z, x, z + L)
+    if (mz && i + 1 < nx && ax > 0.01) line(id, id + 1, ax * (kz === 0 ? AXIS : 1), x, z, x + L, z, 2 * kz)
+    if (mx && j + 1 < nz && az > 0.01) line(id, id + nx, az, x, z, x, z + L, 2 * kx + 1)
     // where two majors cross a +; a minor crossing a major ticks it (a fainter +); two minors, a dot
     const a = Math.min(ax, az) * P.a[id] * (mx && mz ? CROSS_LUM : mx || mz ? 0.55 * CROSS_LUM : MINOR_LUM) * sq(x, z)
     if (a > 0.01) {
       const dp = Math.min(1, P.h[id])
       F.heat = HEAT_FLAT + (HEAT_DEEP - HEAT_FLAT) * dp
-      mark(X, F, mx || mz ? '+' : MINOR, P.x[id], P.y[id], a * (1 + DEEP_LUM * dp * dp), P.z[id])
+      dot(mx || mz ? '+' : MINOR, x, z, P.x[id], P.y[id], P.z[id], a * (1 + DEEP_LUM * dp * dp), kx * 7919 + kz)
     }
   }
   // the well: its rings (from where the square lattice is mostly gone, in toward the bottom), and the spokes between them, a
   // + where they cross
   const rs = []
   for (let k = 0; k < RINGS; k++) rs.push(0.85 * POLAR_R * (1 - k / RINGS))
-  for (const r of rs) {
+  for (const [ri, r] of rs.entries()) {
     const n = Math.max(8, Math.round((RING_SEGS * r) / POLAR_R)), q = (2 * Math.PI) / n
-    for (let j = 0; j < n; j++) seg(RING_LUM, r * Math.cos(j * q), r * Math.sin(j * q), r * Math.cos(j * q + q), r * Math.sin(j * q + q))
+    for (let j = 0; j < n; j++) seg(RING_LUM, r * Math.cos(j * q), r * Math.sin(j * q), r * Math.cos(j * q + q), r * Math.sin(j * q + q), 101 + ri)
   }
   for (let j = 0; j < SPOKES; j++) for (let k = 0; k < RINGS; k++) {
     const c = Math.cos((2 * Math.PI * j) / SPOKES), sj = Math.sin((2 * Math.PI * j) / SPOKES), r = rs[k], x = r * c, z = r * sj
-    if (k + 1 < RINGS) seg(SPOKE_LUM, x, z, rs[k + 1] * c, rs[k + 1] * sj)
-    field(F, x, z)
-    proj(C, x, F.y, z, o)
+    if (k + 1 < RINGS) seg(SPOKE_LUM, x, z, rs[k + 1] * c, rs[k + 1] * sj, 201 + j)
+    sheetAt(F, x, z)
+    proj(C, F.x, F.y, F.z, o)
     const b = 1 - sq(x, z), dp = Math.min(1, F.d + 0.25 * F.g)
     if (o.z <= 0.05 * d || b < 0.01) continue
     F.heat = HEAT_FLAT + (HEAT_DEEP - HEAT_FLAT) * dp
-    mark(X, F, '+', o.x, o.y, CROSS_LUM * b * F.v * (1 - smooth((o.z - f0) / fw)) * (1 + F.g) * (1 + DEEP_LUM * dp * dp) * spot(x, z), o.z)
+    dot('+', x, z, o.x, o.y, o.z, CROSS_LUM * b * F.v * (1 - smooth((o.z - f0) / fw)) * (1 + F.g) * (1 + DEEP_LUM * dp * dp) * spot(F.x, F.z), 301 + j * RINGS + k)
+  }
+}
+// a sheet point's streak as it falls (it is at (sx, sy) on screen, l bright; its heat before it burned, h0): glyphs back along
+// where it was over the last STREAK_E of the way out, one every STREAK letter cells on screen, at most STREAK_N, each burning
+// as it did there, fading toward its tail
+function streak(X, F, C, x, z, sx, sy, l, h0) {
+  const gap = STREAK * X.A.CW
+  let px = sx, py = sy, run = 0, n = 0
+  for (let j = 1; j <= 24 && n < STREAK_N; j++) {
+    warp(W2, lerp(F.dr, F.dr1, j / 24), x, z, F.reach)
+    const r = W2.r, q = W2.q
+    proj(C, W2.x, lerp(well(r * r), HOLE_Y, q * (1 - smooth(r / (THROAT * F.unit)))), W2.z, W2)
+    run += Math.hypot(W2.x - px, W2.y - py)
+    if (run >= gap) {
+      run = 0
+      n++
+      F.heat = h0
+      F.r = r
+      F.q = q
+      burn(F)
+      mark(X, F, stroke(px - W2.x, py - W2.y), W2.x, W2.y, 0.85 * l * (1 - n / (STREAK_N + 1)), W2.z)
+    }
+    px = W2.x
+    py = W2.y
   }
 }
 
@@ -594,16 +757,18 @@ function placeRocks(X, F, C, u) {
     const m = X.mass[i], tau = u - (m.land - FALL)
     F.rk[i] = null
     if (tau <= 0) continue
-    field(F, m.x, m.z)
-    const vis = (X.reduced ? smooth((u - m.land) / 0.1) : 1) * keptA(X, i, u)
+    field(F, m.wx, m.wz) // (where it is: the way out may move it, wayOut)
+    let vis = (X.reduced ? smooth((u - m.land) / 0.1) : 1) * m.ev
     if (vis < 0.01) continue
-    const fell = X.reduced ? 1 : c01(tau / FALL), ym = F.y + m.dropH * (1 - fell * fell) // it falls as things do: faster and faster
+    const fell = X.reduced ? 1 : c01(tau / FALL), ym = lerp(F.y, HOLE_Y, m.lift) + m.dropH * (1 - fell * fell) // it falls as things do: faster and faster
     const q = u - m.land, landed = X.reduced ? 1 : smooth(q / 0.03)
-    proj(C, m.x, ym, m.z, o)
+    proj(C, m.wx, ym, m.wz, o)
     if (o.z <= 0) continue
-    const r = rockR(X, C, o.z, i, u), Rw = (r * o.z) / C.f, lift = ym - F.y + (SIT * Rw) / Math.cos(C.pitch) // it sits in its dent
-    const k = REACH / Math.pow(m.x * m.x + m.z * m.z + (REACH / WELL) ** 2, 1.5) // the well's slope there: d(height)/d(x, z) = k (x, z)
-    const p = F.rk[i] = { x: o.x, y: o.y - SIT * r, r, e: m.K.ext * r, z: o.z, zc: o.z - lift * Math.sin(C.pitch), Rw, lift, dent: m.dent, gx: k * m.x, gz: k * m.z, ym, vis, q, tau, fell, landed, psi: m.K.psi + TUMBLE * (1 - fell), K: m.K }
+    vis *= (1 - smooth((m.q - ROCK_GO[0]) / (ROCK_GO[1] - ROCK_GO[0]))) * lerp(1, smooth((Math.hypot(o.x - F.h.cx, o.y - F.h.cy) / F.h.R - ROCK_NEAR) / ROCK_NEAR_W) * lerp(1, smooth(lightOut(F.h, o.x, o.y) / 0.3), smooth((o.z - F.hz) / (ROCK_BEHIND * F.unit))), smooth(m.q / 0.2)) // going in: fading as it falls, and gone before it comes over the hole's light, or behind it
+    if (vis < 0.01) continue
+    const r = rockR(X, C, o.z, i, u) * lerp(1, SPAG, smooth(m.q / 0.85)), Rw = (r * o.z) / C.f, lift = ym - F.y + (SIT * Rw) / Math.cos(C.pitch) // it sits in its dent
+    const k = REACH / Math.pow(m.wx * m.wx + m.wz * m.wz + (REACH / WELL) ** 2, 1.5) // the well's slope there: d(height)/d(x, z) = k (x, z)
+    const p = F.rk[i] = { x: o.x, y: o.y - SIT * r, r, e: m.K.ext * r, z: o.z, zc: o.z - lift * Math.sin(C.pitch), Rw, lift, dent: m.dent, gx: k * m.wx, gz: k * m.wz, ym, vis, q, tau, fell, landed, psi: m.K.psi + TUMBLE * (1 - fell), K: m.K }
     const rh = reachOf(C, p) // the box it shows in, however it rolls, and its fire above it as it falls
     p.box = [p.x - rh.l, p.y - rh.t - FIRE * r * (1 - landed), p.x + rh.r, p.y + rh.b]
     p.top = rh.t
@@ -617,7 +782,7 @@ function drawMasses(X, F, C, u) {
     if (!p) continue
     const { x: x0, y: y0, r, top, vis, q, landed } = p, rest = X.rest[i]
     // the stem, from just above it up to its text (it comes in once it has landed, and goes as the camera moves on)
-    const sh = X.stemH[i], stem = STEM_LUM * (X.reduced ? vis : smooth(q / 0.15)) * (1 - smooth((u - X.blocks[i].leave) / LEAVE))
+    const sh = X.stemH[i], stem = STEM_LUM * (X.reduced ? vis : smooth(q / 0.15)) * (1 - smooth((u - X.blocks[i].leave) / LEAVE)) * outA(X, u)
     if (stem > 0.02) for (let k = 1, yk = rest + step; yk <= rest + sh; k++, yk = rest + k * step) {
       proj(C, m.x, yk, m.z, o)
       if (o.z > 0 && y0 - o.y > top + 0.5 * ROCK_CLEAR * r) rockPut(X, F, ':', o.x, o.y, 0.8, stem, 0)
@@ -654,6 +819,7 @@ function drawMasses(X, F, C, u) {
       }
     }
   }
+  if (F.dr > 0) for (const [i, m] of X.mass.entries()) if (m.q > 0 && u > m.land) rockTrail(X, F, C, m, i)
   // the leaders: a tethered label's dotted line from its rock's edge to it (the stems' glyph and spacing), coming and going
   // with it, never over text
   const m = 0.3 * X.fs
@@ -679,22 +845,176 @@ function stage(X, F, u, h) {
   C.px = h.cx + (C.px - o.x) * sc
   C.py = h.cy + (C.py - o.y) * sc
   F.C = C
-  F.fade = X.reduced ? smooth(u / PULL) : 1
+  F.h = h
+  F.hz = o.z // (how far the hole is)
+  F.unit = (h.R * o.z) / C.f // (the hole's shadow as drawn, in the scene's units: at least 1, more where it is drawn bigger than the camera sees it, holeK)
+  // the way out, e: 0..1 through it: how far the sheet has drained (dr), and a moment before (dr1: the streaks); how far
+  // into the drain its look has come (mix)
+  const e = (F.e = c01((u - X.ex0) / EXIT_ROOM))
+  F.reach = X.reach
+  F.gone = X.reduced ? smooth((e - DRAIN_FROM) / (GONE_AT - DRAIN_FROM)) : 0 // (reduced motion: no drain, it all fades where it is)
+  F.dr = X.reduced ? 0 : drainAt(e)
+  F.dr1 = X.reduced ? 0 : drainAt(e - STREAK_E)
+  F.mix = X.reduced ? 0 : smooth((e - DRAIN_FROM + 0.05) / 0.2)
+  F.fin = smooth((c01((e - DRAIN_FROM) / (DRAIN_TO - DRAIN_FROM)) - 1 + DRAIN_THIN) / DRAIN_THIN) // (its last stretch: it thins out)
+  Object.assign(F, { burn: 0, mv: '', sp: 0 })
+  F.fade = (X.reduced ? smooth(u / PULL) : 1) * (1 - F.gone)
   F.ring = X.reduced ? -1 : RING_SPEED * u
   F.ms = F.ms || []
   F.nm = 0
-  for (const m of X.mass) {
+  for (const [i, m] of X.mass.entries()) {
     const q = u - m.land
     m.dent = 0
+    wayOut(X, F, m, i, u)
     if (q <= 0) continue
-    const depth = X.reduced ? DIMPLE * smooth(q / 0.1) : DIMPLE * (1 - Math.exp(-q / BOUNCE) * Math.cos(BOUNCE_FREQ * 2 * Math.PI * q) * (1 - q / (q + 0.5)))
+    const depth = (X.reduced ? DIMPLE * smooth(q / 0.1) : DIMPLE * (1 - Math.exp(-q / BOUNCE) * Math.cos(BOUNCE_FREQ * 2 * Math.PI * q) * (1 - q / (q + 0.5)))) * m.dentA
     const rip = X.reduced ? -1 : RIPPLE_SPEED * q, ripA = Math.exp(-rip / RIPPLE_FADE)
-    F.ms[F.nm++] = { x: m.x, z: m.z, depth, rip: ripA > 0.02 ? rip : -1, ripA }
+    F.ms[F.nm++] = { x: m.wx, z: m.wz, depth, rip: ripA > 0.02 ? rip : -1, ripA } // (on the way out, its dent goes with it)
     m.dent = depth
   }
   placeRocks(X, F, C, u)
   F.anchors = X.mass.map((m, i) => u > X.blocks[i].leave ? X.held[i] : (proj(C, m.x, X.rest[i] + X.stemH[i], m.z, o), { x: o.x, y: o.y }))
   return C
+}
+
+// ---------------- the way out ----------------
+// how much of the text shows (the last role's, the labels, the stems): it goes first
+const outA = (X, u) => 1 - smooth((u - X.ex0) / (EXIT_TEXT * EXIT_ROOM))
+// how far the drain has got, 0..1, at e (0..1) of the way out: slow at first, faster and faster
+const drainAt = (e) => { const p = c01((e - DRAIN_FROM) / (DRAIN_TO - DRAIN_FROM)), a = p ** DRAIN_EASE; return a / (a + (1 - p) ** DRAIN_EASE) }
+const W1 = {}, W2 = {} // (scratch)
+// where the drain (dr) has carried the sheet's point at (x, z), into w: w.x, w.z; how far from the hole it is then (w.r), and
+// how far through its fall (w.q, 0..1: each point falls in its own time, (r / R)^1.5 of the drain, from rest, faster
+// and faster, turning about the hole the faster the nearer it comes)
+function warp(w, dr, x, z, R) {
+  const r = Math.hypot(x, z), q = dr > 0 ? Math.min(0.999, dr / (r / R) ** 1.5) : 0
+  w.q = q
+  if (!q) {
+    w.x = x
+    w.z = z
+    w.r = r
+    return w
+  }
+  const g = 1 - q * q, s = g ** (2 / 3), a = -2 * Math.PI * DRAIN_SPIN * Math.log(g), c = Math.cos(a) * s, n = Math.sin(a) * s
+  w.x = x * c - z * n
+  w.z = x * n + z * c
+  w.r = r * s
+  return w
+}
+// the sheet's point at (x, z) (field), where the drain has carried it (warp: F.x, F.z, F.r, F.q): near the hole (THROAT) it
+// leaves the well's bottom for the hole's centre, and is gone at its shadow; and the sheet ends, softly, F.reach out
+function sheetAt(F, x, z, pre) {
+  if (!(F.dr > 0)) {
+    field(F, x, z)
+    F.x = x
+    F.z = z
+    F.q = 0
+    return
+  }
+  const r0 = Math.hypot(x, z)
+  if (pre) { F.x = pre.x; F.z = pre.z; F.r = pre.r; F.q = pre.q } // (worked out already)
+  else warp(F, F.dr, x, z, F.reach)
+  field(F, F.x, F.z)
+  F.y = lerp(F.y, HOLE_Y, F.q * (1 - smooth(F.r / (THROAT * F.unit))))
+  F.v *= (1 - F.q * (1 - smooth((F.r - F.unit) / (1.5 * F.unit)))) * lerp(1, 1 - smooth((r0 - F.reach + DRAIN_EDGE) / DRAIN_EDGE), smooth(F.dr / 0.3))
+}
+// how a point falling F.r from the hole, F.q through its fall, burns: hotter (F.heat), into the hole's own colours (F.burn of
+// it, at F.hot) as it comes into the throat, and brighter (returned)
+function burn(F) {
+  const w = F.q * (1 - smooth((F.r - BURN_ORANGE * F.unit) / ((BURN_WHITE - BURN_ORANGE) * F.unit)))
+  F.heat = lerp(F.heat, 1, smooth(w / 0.55))
+  F.burn = smooth((w - 0.45) / 0.55)
+  F.hw = w
+  F.hot = lerp(0.8, 0.4, F.burn)
+  return 1 + (BURN_LUM - 1) * w
+}
+// how a glyph of the draining sheet looks (at (x, z) where it was, (sx, sy) on screen now, on line k; sheetAt has put it):
+// brighter or fainter by its line and its swathe of the sheet; falling, it burns (burn); and where it moves fast on screen,
+// it draws as a stroke along its way (F.mv; F.sp: how far it has come on screen over the last STREAK_E of the way out)
+function lookAt(X, F, C, x, z, sx, sy, k) {
+  const m = F.mix
+  let l = lerp(1, 0.25 + 1.5 * hash(k, 7) ** 2, VARY * m) * lerp(1, 0.3 + (1.4 * NZ(x * 0.05 + 40, z * 0.05 + 40, 2)) / 0.75, SWATHE * m)
+  F.burn = F.hw = F.sp = 0
+  F.mv = ''
+  if (F.q > 0) {
+    l *= burn(F)
+    warp(W1, F.dr1, x, z, F.reach)
+    proj(C, W1.x, F.y, W1.z, W1)
+    F.vx = sx - W1.x
+    F.vy = sy - W1.y
+    F.sp = Math.hypot(F.vx, F.vy)
+    if (F.sp > STREAK_TURN * X.A.CW) F.mv = stroke(F.vx, F.vy)
+  }
+  return l
+}
+// a glyph of the draining sheet (lookAt has had it) drawn as a band: the further it has fallen the wider, out to DRAIN_THICK
+// cells either side, square to its way on screen (dx, dy), each cell out DRAIN_EDGE_LUM as bright; brighter (DRAIN_GLOW),
+// and in the throat, heavier (HEAVY, the brighter the denser)
+function band(X, F, ch, x, y, l, z, dx, dy) {
+  l *= lerp(1, DRAIN_GLOW, F.mix)
+  mark(X, F, F.hw > 0.3 ? HEAVY[Math.min(HEAVY.length - 1, Math.floor(c01(0.7 * l * F.hw) * HEAVY.length))] : ch, x, y, l, z)
+  const w = DRAIN_THICK * smooth((F.q - 0.15) / 0.4) * smooth((l - 0.12) / 0.2) * F.mix // (the bright ones only: the faint stay fine)
+  if (w < 0.05) return
+  const len = Math.hypot(dx, dy) || 1, nx = (-dy / len) * X.A.CW, ny = (dx / len) * X.A.CH
+  for (let k = 1; k < w + 1; k++) {
+    const lk = l * DRAIN_EDGE_LUM ** k * c01(w - k + 1)
+    if (lk < 0.02) break
+    mark(X, F, ch, x + k * nx, y + k * ny, lk, z)
+    mark(X, F, ch, x - k * nx, y - k * ny, lk, z)
+  }
+}
+// rock i (m) on the way out: where it is on the sheet (m.wx, m.wz), how far it has left it for the hole's centre (m.lift),
+// how far through its fall (m.q), how much of it shows (m.ev: those that had faded come back first) and of its dent (m.dentA:
+// its dent goes with it, flattening as it speeds up). It goes with the sheet, as the sheet's point where it is does
+function wayOut(X, F, m, i, u) {
+  const k = keptA(X, i, u)
+  Object.assign(m, { wx: m.x, wz: m.z, lift: 0, q: 0, ev: k, dentA: 1 })
+  if (!F.e) return
+  if (X.reduced) { m.ev = k * (1 - F.gone); return } // (reduced motion: it fades where it is)
+  warp(W1, F.dr, m.x, m.z, F.reach)
+  Object.assign(m, { wx: W1.x, wz: W1.z, q: W1.q, lift: W1.q * (1 - smooth(W1.r / (THROAT * F.unit))), ev: Math.max(k, smooth(F.e / DRAIN_FROM)), dentA: 1 - smooth(W1.q / 0.6) })
+}
+// a rock going in (m, i): the streak it stretches into, glyphs back along where it has been over the last ROCK_TAIL of the
+// way out, burning as it nears the hole; and the flare where its way first comes to the hole's light on screen
+function rockTrail(X, F, C, m, i) {
+  const h = F.h, e = F.e, CW = X.A.CW
+  const at = (e) => { warp(W2, drainAt(e), m.x, m.z, F.reach); const q = W2.q, r = W2.r; proj(C, W2.x, lerp(well(r * r), HOLE_Y, q * (1 - smooth(r / (THROAT * F.unit)))), W2.z, W2); W2.r = r; W2.q = q; return W2 }
+  const inside = (w) => w.z <= 0 || Math.hypot(w.x - h.cx, w.y - h.cy) < 1.08 * h.R
+  let ev = Infinity
+  for (let k = 0; k <= 72; k++) {
+    const ek = lerp(DRAIN_FROM, DRAIN_TO, k / 72)
+    if (inside(at(ek))) { ev = ek; break }
+  }
+  const f = (e - ev) / FLARE_E, lum = 1.3 * smooth(m.q / 0.25) * (1 - smooth(f))
+  if (lum > 0.02) {
+    const n = 48, gap = STREAK * CW
+    at(e)
+    let px = W2.x, py = W2.y, run = 0
+    for (let j = 1; j <= n; j++) { // a glyph every STREAK letter cells along it on screen, fading toward its tail
+      at(e - (ROCK_TAIL * j) / n)
+      const x = W2.x, y = W2.y
+      run += Math.hypot(x - px, y - py)
+      if (run >= gap && !inside(W2)) {
+        run = 0
+        F.heat = 0.9
+        F.r = W2.r
+        F.q = W2.q
+        const l = burn(F)
+        mark(X, F, stroke(x - px, y - py), x, y, lum * l * (1 - j / n), Infinity)
+      }
+      px = x
+      py = y
+    }
+    F.burn = 0
+  }
+  if (f > 0 && f < 1) { // the flare: hot glyphs thrown out from where it went in, round the hole's light, gone in a moment
+    at(ev)
+    const x0 = W2.x, y0 = W2.y, go = 1 - (1 - f) ** 3
+    for (let n = 0; n < FLARE_N; n++) {
+      const th = (2 * Math.PI * (n + hash(i * 71 + n, 3))) / FLARE_N, dd = (0.2 + 0.8 * hash(i * 71 + n, 5)) * go * FLARE_REACH * CW, x = x0 + dd * Math.cos(th), y = y0 + 0.6 * dd * Math.sin(th)
+      if (Math.hypot(x - h.cx, y - h.cy) > 1.02 * h.R) put(X.T, n % 3 ? POOLS[3][Math.floor(hash(n, i + 9) * 6)] : '*', X.snap(x), X.snap(y), 0.8, FLARE_LUM * (1 - f) ** 1.5 * (0.6 + 0.4 * hash(n, i + 3)), 0, 1)
+    }
+  }
 }
 const sep = (b, c) => Math.max(b[0] - c[2], c[0] - b[2], b[1] - c[3], c[1] - b[3]) // how far apart two boxes are (< 0: they overlap)
 // how far box b is from the rock in box c, taken as the ellipse in it (its corners are empty)
@@ -827,7 +1147,7 @@ const keptA = (X, i, u) => {
   return lerp(gone(n), gone(n + 1), smoother(X.keep - n))
 }
 // how much of a role's label shows: it comes in as its text goes (and goes with keptA)
-const labelA = (X, B, u) => smooth((u - B.leave - 0.4 * LEAVE) / LEAVE) * keptA(X, B.i, u)
+const labelA = (X, B, u) => smooth((u - B.leave - 0.4 * LEAVE) / LEAVE) * keptA(X, B.i, u) * outA(X, u)
 
 // this frame, worked out once for drawUnder and drawOver
 function prep(X, h, s) {
@@ -848,7 +1168,7 @@ function prep(X, h, s) {
   // each past role's label, by its rock: where it sits against it at each rest pose (posesOf), eased from one to the next
   // as the camera glides (as the camera is), so it never jumps; it follows its rock, but not its roll
   const pd = 0.2 * X.fs, give = LABEL_GIVE * X.fs, CW = X.A.CW, n = X.mass.length
-  const ca = X.blocks.map((B) => c01((u - B.from + 0.05) / 0.1) * (1 - smooth((u - B.leave) / LEAVE))) // how much of each role's text shows
+  const ca = X.blocks.map((B) => c01((u - B.from + 0.05) / 0.1) * (1 - smooth((u - B.leave) / LEAVE)) * outA(X, u)) // how much of each role's text shows
   const cards = X.blocks.map((B) => { const A = F.anchors[B.i]; return [A.x + B.x0, A.y + B.y0, A.x + B.x1, A.y + B.y1] })
   let k = n - 1
   while (k >= 0 && u < X.at[k]) k--
@@ -884,7 +1204,7 @@ function prep(X, h, s) {
     if (t.a > 0.01) pad(t.card, t.a, KNOCK_PAD * X.fs)
     if (t.l > 0.01) pad(t.lab, t.l, LABEL_KNOCK * X.fs)
   }
-  if (F.fade > 0) drawSheet(X, F, C)
+  if (F.fade > 0 && F.dr < 1) drawSheet(X, F, C)
   drawMasses(X, F, C, u)
   F.back = render(X.T, 1)
   F.front = render(X.T, 0) // what of the sheet is nearer than a rock: drawn over the rocks
@@ -1041,7 +1361,7 @@ function drawText(ctx, X, F, h, u) {
     }
     for (const B of X.blocks) {
       if (u < B.from - SCRAMBLE) continue
-      const lv = 1 - smooth((u - B.leave) / LEAVE), a0 = A[B.i]
+      const lv = (1 - smooth((u - B.leave) / LEAVE)) * outA(X, u), a0 = A[B.i]
       if (lv > 0.01) for (const q of B.chars) {
         const a = u - q.at
         if (a < -SCRAMBLE) continue

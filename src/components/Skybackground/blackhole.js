@@ -201,6 +201,9 @@ export function frame(t, G, out, dive = 1, ox = 0, oy = 0, incSet = null, tiltSe
 }
 
 export const INTRO_END = 13 // seconds: by then the black hole has finished drawing itself
+// the disk, once it has left the intro's pose, seen from this much further above (added to its tilt, inc: the shape of its
+// disk, height over width). grid.js sets it on the experience section's way out; 0 everywhere else, as it always was
+export const HOLE_VIEW = { inc: 0 }
 
 // where the hole is on screen at time t: centre and shadow radius in px, how far
 // the maths' camera has eased in (it does just after the flash), and the disk's pose.
@@ -212,7 +215,7 @@ export function hole(t, W, H, S, m = 0, B = null) {
     h.dive = B.k ** m // grows evenly
     h.R *= h.dive
     h.cy = lerp(h.cy, B.cy, m)
-    h.inc = lerp(h.inc, REST_INC, m)
+    h.inc = lerp(h.inc, REST_INC, m) + HOLE_VIEW.inc
     h.tilt = lerp(TILT, REST_TILT, m)
   }
   return h

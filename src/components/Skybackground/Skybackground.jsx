@@ -20,7 +20,7 @@ const STORY_SPEED = 1.2 // the fastest the asteroid's story plays (from its entr
 const HINT_AFTER = 1 // the "scroll" hint at the bottom comes in this long after the intro ends, in clock seconds (SPEED)
 const HINT_FADE = 1.5 // and fades in over this long
 const HINT_GONE = 0.12 // screens of scroll that fade it out (it comes back at the top)
-const SKIP_INTRO = false // true, for tuning: start at the end of the intro, hole already where the scroll puts it
+const SKIP_INTRO = true // true, for tuning: start at the end of the intro, hole already where the scroll puts it
 
 // dev only: the sky is set up once, in an effect that hot updates don't re-run, so a knob edit
 // would change nothing on screen. Reload instead (with SKIP_INTRO the scroll position survives it)
